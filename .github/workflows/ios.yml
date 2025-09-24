@@ -1,0 +1,13 @@
+name: iOS CI
+on: [push, pull_request]
+jobs:
+  build-test:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - run: brew install xcodegen
+      - run: xcodegen generate
+      - name: Build & Test (iPhone 17)
+        run: |
+          DEV=$(xcrun simctl list devices | awk -F '[()]' '/iPhone 17/ {print $2; exit}')
+          xcodebuild -scheme SynapseTasks -destination "platform=iOS Simulator,OS=latest,id=$DEV" -configuration Debug test
