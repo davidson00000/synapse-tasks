@@ -6,11 +6,12 @@ repos:
         entry: swiftformat
         language: system
         types: [swift]
-        args: ["--swiftversion", "5.10", "."]
+        pass_filenames: false # ← 追加
+        args: ["--swiftversion", "5.10", "."] # ルートを対象
       - id: swiftlint
         name: swiftlint
         entry: swiftlint
         language: system
         types: [swift]
-        pass_filenames: false   # ルートで一括Lint
+        pass_filenames: false
         args: ["--strict"]
