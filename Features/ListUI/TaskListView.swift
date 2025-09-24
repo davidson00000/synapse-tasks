@@ -1,5 +1,5 @@
-import SwiftUI
 import CoreData
+import SwiftUI
 
 struct TaskListView: View {
     @Environment(\.managedObjectContext) private var context
@@ -7,7 +7,7 @@ struct TaskListView: View {
     @FetchRequest(
         sortDescriptors: [
             NSSortDescriptor(keyPath: \Task.dueDate, ascending: true),
-            NSSortDescriptor(keyPath: \Task.createdAt, ascending: true)
+            NSSortDescriptor(keyPath: \Task.createdAt, ascending: true),
         ],
         animation: .default
     )
@@ -72,6 +72,18 @@ struct TaskListView: View {
             assertionFailure("Failed to save context: \(error)")
         }
     }
+
+    private func addTask(title: String) {
+        let newTask = TaskEntity(context: context)
+        newTask.id = UUID()
+        newTask.title = title
+        newTask.status = "todo"
+        newTask.priority = 3
+        newTask.createdAt = Date()
+        newTask.updatedAt = Date()
+
+        persistChanges()
+    }
 }
 
 private struct TaskRow: View {
@@ -110,17 +122,17 @@ private struct TaskRow: View {
 
     private var statusColor: Color {
         switch task.taskStatus {
-        case .todo: return .blue
-        case .doing: return .orange
-        case .done: return .green
+        case .todo: .blue
+        case .doing: .orange
+        case .done: .green
         }
     }
 
     private var statusIcon: String {
         switch task.taskStatus {
-        case .todo: return "square"
-        case .doing: return "clock"
-        case .done: return "checkmark.circle"
+        case .todo: "square"
+        case .doing: "clock"
+        case .done: "checkmark.circle"
         }
     }
 

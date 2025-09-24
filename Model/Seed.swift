@@ -43,7 +43,7 @@ enum Seed {
             "Metrics",
             "Automation",
             "Meeting",
-            "Bugfix"
+            "Bugfix",
         ].map { name in
             let tag = Tag(context: context)
             tag.name = name
@@ -65,7 +65,7 @@ enum Seed {
         let baseDate = Date()
         let calendar = Calendar.current
 
-        for index in 0..<count {
+        for index in 0 ..< count {
             let task = Task(context: context)
             task.title = "Sample Task #\(index + 1)"
             task.detail = "This is a placeholder detail for task number \(index + 1)."
@@ -126,9 +126,9 @@ enum Seed {
 
     private static func connectionKind(for index: Int) -> ConnectionKind {
         switch index % 3 {
-        case 0: return .related
-        case 1: return .dependsOn
-        default: return .blockedBy
+        case 0: .related
+        case 1: .dependsOn
+        default: .blockedBy
         }
     }
 }
