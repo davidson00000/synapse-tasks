@@ -8,8 +8,10 @@ struct SynapseTasksApp: App {
     var body: some Scene {
         WindowGroup {
             TaskListView() // ← とりあえず一覧ビュー（後で差し替えOK）
-                .environment(\.managedObjectContext,
-                             persistenceController.container.viewContext)
+                .environment(
+                    \.managedObjectContext,
+                    persistenceController.container.viewContext
+                )
         }
     }
 }

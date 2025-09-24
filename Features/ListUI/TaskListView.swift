@@ -122,17 +122,17 @@ private struct TaskRow: View {
 
     private var statusColor: Color {
         switch task.taskStatus {
-        case .todo: .blue
-        case .doing: .orange
-        case .done: .green
+            case .todo: .blue
+            case .doing: .orange
+            case .done: .green
         }
     }
 
     private var statusIcon: String {
         switch task.taskStatus {
-        case .todo: "square"
-        case .doing: "clock"
-        case .done: "checkmark.circle"
+            case .todo: "square"
+            case .doing: "clock"
+            case .done: "checkmark.circle"
         }
     }
 

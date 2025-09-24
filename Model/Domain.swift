@@ -1,41 +1,92 @@
-import CoreData
 import SwiftUI
 
-// 状態/種別のドメイン表現（データベースには String として保存）
-enum TaskStatus: String, CaseIterable {
-    case todo, doing, done
+enum TaskStatus: Int16, CaseIterable {
+    case todo = 0
+    case doing = 1
+    case done = 2
+
     var displayName: String {
-        switch self { case .todo: "To Do"; case .doing: "Doing"; case .done: "Done" }
+        switch self {
+            case .todo:
+                "To Do"
+            case .doing:
+                "Doing"
+            case .done:
+                "Done"
+        }
     }
 
     var icon: String {
-        switch self { case .todo: "square"; case .doing: "clock"; case .done: "checkmark.circle" }
+        switch self {
+            case .todo:
+                "checklist"
+            case .doing:
+                "hammer"
+            case .done:
+                "checkmark.circle.fill"
+        }
     }
 
     var color: Color {
-        switch self { case .todo: .blue; case .doing: .orange; case .done: .green }
+        switch self {
+            case .todo:
+                .blue
+            case .doing:
+                .orange
+            case .done:
+                .green
+        }
     }
 }
 
-enum ConnectionKind: String, CaseIterable {
-    case related, dependsOn, blockedBy
+enum TaskPriority: Int16, CaseIterable {
+    case low = 0
+    case medium = 1
+    case high = 2
+
+    var displayName: String {
+        switch self {
+            case .low:
+                "Low"
+            case .medium:
+                "Medium"
+            case .high:
+                "High"
+        }
+    }
 }
 
-// Core Data の自動生成クラス（TaskEntity 等）への拡張だけを書く
+enum ConnectionKind: Int16, CaseIterable {
+    case related = 0
+    case dependsOn = 1
+    case blockedBy = 2
+
+    var displayName: String {
+        switch self {
+            case .related:
+                "Related"
+            case .dependsOn:
+                "Depends On"
+            case .blockedBy:
+                "Blocked By"
+        }
+    }
+}
+
 extension TaskEntity {
-    var taskStatus: TaskStatus {
-        get { TaskStatus(rawValue: status ?? "todo") ?? .todo }
-        set { status = newValue.rawValue }
-    }
-
-    var safeTitle: String { title ?? "" }
-
-    // 初期化時に安全な初期値を入れるユーティリティ
-    func initializeIfNeeded() {
-        if id == nil { id = UUID() }
-        if createdAt == nil { createdAt = Date() }
-        if updatedAt == nil { updatedAt = Date() }
-        if status == nil { status = TaskStatus.todo.rawValue }
-        if priority == 0 { priority = 3 }
+    /// 既存値を壊さずに、nil/ゼロの項目だけ初期化
+    func initializeIfNeeded(
+        id: UUID = .init(),
+        createdAt: Date? = nil,
+        updatedAt: Date? = nil,
+        statusRaw: Int16? = nil,
+        priorityRaw: Int16? = nil
+    ) {
+        let now = Date()
+        if self.id == nil { self.id = id }
+        if self.createdAt == nil { self.createdAt = createdAt ?? now }
+        if self.updatedAt == nil { self.updatedAt = updatedAt ?? now }
+        if self.statusRaw == 0 { self.statusRaw = statusRaw ?? TaskStatus.todo.rawValue }
+        if self.priorityRaw == 0 { self.priorityRaw = priorityRaw ?? TaskPriority.medium.rawValue }
     }
 }

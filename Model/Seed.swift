@@ -72,12 +72,12 @@ enum Seed {
             task.priority = Int16((index % 5) + 1)
 
             switch index % 3 {
-            case 0:
-                task.taskStatus = .todo
-            case 1:
-                task.taskStatus = .doing
-            default:
-                task.taskStatus = .done
+                case 0:
+                    task.taskStatus = .todo
+                case 1:
+                    task.taskStatus = .doing
+                default:
+                    task.taskStatus = .done
             }
 
             if index % 2 == 0 {
@@ -126,9 +126,9 @@ enum Seed {
 
     private static func connectionKind(for index: Int) -> ConnectionKind {
         switch index % 3 {
-        case 0: .related
-        case 1: .dependsOn
-        default: .blockedBy
+            case 0: .related
+            case 1: .dependsOn
+            default: .blockedBy
         }
     }
 }
