@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<model type="com.apple.IDECoreDataModeler.DataModel" documentVersion="1.0" lastSavedToolsVersion="22522" systemVersion="23E224" minimumToolsVersion="Automatic" sourceLanguage="Swift" userDefinedModelVersionIdentifier="">
+    <entity name="Task" representedClassName="Task" syncable="YES">
+        <attribute name="id" attributeType="UUIDAttributeType" usesScalarValueType="NO" indexed="YES" optional="NO"/>
+        <attribute name="title" attributeType="String" optional="NO" indexed="YES"/>
+        <attribute name="detail" attributeType="String" optional="YES"/>
+        <attribute name="status" attributeType="String" optional="NO" defaultValueString="todo" indexed="YES"/>
+        <attribute name="priority" attributeType="Integer 16" optional="NO" defaultValueString="3"/>
+        <attribute name="dueDate" attributeType="Date" optional="YES" indexed="YES"/>
+        <attribute name="createdAt" attributeType="Date" optional="NO"/>
+        <attribute name="updatedAt" attributeType="Date" optional="NO"/>
+        <relationship name="category" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Category" inverseName="tasks" inverseEntity="Category"/>
+        <relationship name="tags" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="Tag" inverseName="tasks" inverseEntity="Tag"/>
+        <relationship name="node" optional="YES" maxCount="1" deletionRule="Cascade" destinationEntity="NodeLayout" inverseName="task" inverseEntity="NodeLayout"/>
+        <relationship name="connectionsFrom" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="Connection" inverseName="fromTask" inverseEntity="Connection"/>
+        <relationship name="connectionsTo" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="Connection" inverseName="toTask" inverseEntity="Connection"/>
+    </entity>
+    <entity name="Category" representedClassName="Category" syncable="YES">
+        <attribute name="id" attributeType="UUIDAttributeType" usesScalarValueType="NO" optional="NO"/>
+        <attribute name="name" attributeType="String" optional="NO" indexed="YES"/>
+        <relationship name="tasks" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="Task" inverseName="category" inverseEntity="Task"/>
+    </entity>
+    <entity name="Tag" representedClassName="Tag" syncable="YES">
+        <attribute name="id" attributeType="UUIDAttributeType" usesScalarValueType="NO" optional="NO"/>
+        <attribute name="name" attributeType="String" optional="NO" indexed="YES"/>
+        <relationship name="tasks" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="Task" inverseName="tags" inverseEntity="Task"/>
+    </entity>
+    <entity name="Connection" representedClassName="Connection" syncable="YES">
+        <attribute name="id" attributeType="UUIDAttributeType" usesScalarValueType="NO" optional="NO"/>
+        <attribute name="kind" attributeType="String" optional="NO" defaultValueString="related"/>
+        <attribute name="createdAt" attributeType="Date" optional="NO"/>
+        <relationship name="fromTask" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Task" inverseName="connectionsFrom" inverseEntity="Task"/>
+        <relationship name="toTask" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Task" inverseName="connectionsTo" inverseEntity="Task"/>
+    </entity>
+    <entity name="NodeLayout" representedClassName="NodeLayout" syncable="YES">
+        <attribute name="x" attributeType="Double" optional="NO"/>
+        <attribute name="y" attributeType="Double" optional="NO"/>
+        <attribute name="locked" attributeType="Boolean" optional="NO" defaultValueString="NO"/>
+        <relationship name="task" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Task" inverseName="node" inverseEntity="Task"/>
+    </entity>
+    <elements>
+        <element name="Task" positionX="160" positionY="160" width="128" height="240"/>
+        <element name="Category" positionX="400" positionY="160" width="128" height="120"/>
+        <element name="Tag" positionX="400" positionY="-80" width="128" height="120"/>
+        <element name="Connection" positionX="-80" positionY="-80" width="128" height="120"/>
+        <element name="NodeLayout" positionX="-80" positionY="160" width="128" height="120"/>
+    </elements>
+</model>
