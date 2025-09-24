@@ -1,0 +1,77 @@
+app:
+  name: SynapseTasks
+  bundle_id: com.yourdomain.synapsetasks
+  platform: ios
+  min_ios: 17.0
+
+entities:
+  Task:
+    attributes:
+      id: uuid(primary, indexed)
+      title: string(indexed, required, max=120)
+      detail: string(optional)
+      status: enum(todo|doing|done, default=todo, indexed)
+      priority: int16(min=1, max=5, default=3)
+      dueDate: date(optional, indexed)
+      createdAt: date(default=now)
+      updatedAt: date(default=now)
+    relations:
+      category: Category (toOne, inverse=tasks)
+      tags: Tag (toMany, inverse=tasks)
+      node: NodeLayout (toOne, inverse=task, cascade)
+
+  Category:
+    attributes:
+      id: uuid(primary)
+      name: string(indexed, required)
+    relations:
+      tasks: Task (toMany, inverse=category, nullify)
+
+  Tag:
+    attributes:
+      id: uuid(primary)
+      name: string(indexed, required)
+    relations:
+      tasks: Task (toMany, inverse=tags)
+
+  Connection:
+    attributes:
+      id: uuid(primary)
+      kind: enum(related|dependsOn|blockedBy, default=related)
+      createdAt: date(default=now)
+    relations:
+      fromTask: Task (toOne, inverse=connectionsFrom, nullify)
+      toTask: Task (toOne, inverse=connectionsTo, nullify)
+
+  NodeLayout:
+    attributes:
+      x: double
+      y: double
+      locked: bool(default=false)
+    relations:
+      task: Task (toOne, inverse=node, nullify)
+
+views:
+  list:
+    type: swiftui.list
+    entity: Task
+    fields: [title, dueDate, status, priority]
+  map:
+    type: spritekit.graph
+    minimap: true
+    gestures: [pinchZoom, pan, longPressLock]
+
+search:
+  type: local
+  scope: [Task.title, Task.detail, Tag.name, Category.name]
+  autozoom:
+    duration_ms: 600
+
+limits:
+  free:
+    nodes: 50
+    edges: 100
+  pro:
+    nodes: unlimited
+    edges: unlimited
+
