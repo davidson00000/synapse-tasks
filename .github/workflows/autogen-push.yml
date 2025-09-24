@@ -1,0 +1,34 @@
+name: Auto Generate & Push
+
+on:
+  push:
+    paths:
+      - "specs/**"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-commit:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Codegen (placeholder)
+        run: |
+          bash tools/codegen.sh specs/app.yaml
+
+      - name: Commit changes
+        run: |
+          git config user.name  "synapse-bot"
+          git config user.email "actions@users.noreply.github.com"
+          if [ -n "$(git status --porcelain)" ]; then
+            git add -A
+            git commit -m "chore(auto): regenerate from specs [skip ci]"
+            git push origin HEAD:${{ github.ref_name }}
+          else
+            echo "No changes to commit."
+          fi
