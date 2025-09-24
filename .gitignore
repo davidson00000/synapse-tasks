@@ -1,0 +1,16 @@
+# Xcode / iOS
+DerivedData/
+build/
+*.xcworkspace/xcuserdata/
+xcuserdata/
+*.xcuserstate
+# SwiftPM
+.build/
+# CocoaPods（使うなら）
+Pods/
+# Fastlane
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots
+# Misc
+.DS_Store
