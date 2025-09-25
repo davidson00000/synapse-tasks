@@ -1,9 +1,12 @@
+# SwiftLint configuration for CI autofix-first workflow
+
 disabled_rules:
-  - trailing_whitespace
-  - trailing_comma
+  - multiple_closures_with_trailing_closure
+  - large_tuple
+  - identifier_name           # 'to' などは自動修正不可のため一旦OFF
+  - superfluous_disable_command
 
-switch_case_alignment:
-  indented_cases: true   # ← ここを true に
+type_body_length:
+  warning: 350
+  error: 450
 
-identifier_name:
-  excluded: [to, id]

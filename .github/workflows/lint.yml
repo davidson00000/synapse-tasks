@@ -12,19 +12,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install tooling (brew)
+      - name: Select Xcode 16.x
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: '16.x'
+
+      - name: Install tools
         run: |
           brew update
-          brew install xcodegen swiftformat swiftlint pre-commit
+          brew install swiftformat swiftlint
 
-      - name: xcodegen generate (if project.yml exists)
-        run: |
-          if [ -f project.yml ]; then
-            xcodegen generate
-          else
-            echo "project.yml not found, skipping xcodegen"
-          fi
+      - name: SwiftFormat (lint mode)
+        run: swiftformat --lint .
 
-      - name: Run SwiftFormat / SwiftLint via pre-commit
-        run: pre-commit run --all-files
+      - name: SwiftLint (no fix)
+        run: swiftlint
 

@@ -7,9 +7,11 @@ struct SynapseTasksApp: App {
 
     var body: some Scene {
         WindowGroup {
-            TaskListView(initialTab: launchSettings.initialTab,
-                         initialWeeklyDate: launchSettings.initialWeeklyDate)
-                .environmentObject(store)
+            TaskListView(
+                initialTab: launchSettings.initialTab,
+                initialWeeklyDate: launchSettings.initialWeeklyDate
+            )
+            .environmentObject(store)
         }
     }
 }
@@ -20,7 +22,8 @@ private struct LaunchSettings {
 
     init(environment: [String: String] = ProcessInfo.processInfo.environment) {
         if let tabValue = environment["TASKS_SCREENSHOT_TAB"]?.lowercased(),
-           let tab = TaskListView.Tab(rawValue: tabValue) {
+           let tab = TaskListView.Tab(rawValue: tabValue)
+        {
             initialTab = tab
         } else {
             initialTab = .list
@@ -34,10 +37,12 @@ private struct LaunchSettings {
         calendar.firstWeekday = 2
         calendar.locale = Locale(identifier: "ja_JP")
         let today = Date()
-        let startOfWeek = calendar.date(from: calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: today)) ?? today
+        let startOfWeek = calendar
+            .date(from: calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: today)) ?? today
 
         guard let rawValue = environment["TASKS_SELECTED_WEEKDAY"],
-              let weekdayIndex = Int(rawValue) else {
+              let weekdayIndex = Int(rawValue)
+        else {
             return today
         }
 

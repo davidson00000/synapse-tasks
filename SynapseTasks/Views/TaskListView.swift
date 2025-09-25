@@ -10,9 +10,9 @@ struct TaskListView: View {
 
         var label: String {
             switch self {
-            case .list: return "リスト"
-            case .board: return "ボード"
-            case .weekly: return "週間"
+                case .list: "リスト"
+                case .board: "ボード"
+                case .weekly: "週間"
             }
         }
     }
@@ -24,9 +24,11 @@ struct TaskListView: View {
 
     private let calendar: Calendar
 
-    init(initialTab: Tab = .list,
-         initialWeeklyDate: Date = Date(),
-         calendar: Calendar = Calendar(identifier: .gregorian)) {
+    init(
+        initialTab: Tab = .list,
+        initialWeeklyDate: Date = Date(),
+        calendar: Calendar = Calendar(identifier: .gregorian)
+    ) {
         _selectedTab = State(initialValue: initialTab)
         let startOfDay = calendar.startOfDay(for: initialWeeklyDate)
         _selectedDate = State(initialValue: startOfDay)
@@ -65,18 +67,18 @@ struct TaskListView: View {
     @ViewBuilder
     private var content: some View {
         switch selectedTab {
-        case .list:
-            listView
-        case .board:
-            boardView
-        case .weekly:
-            weeklyView
+            case .list:
+                listView
+            case .board:
+                boardView
+            case .weekly:
+                weeklyView
         }
     }
 
     private var listView: some View {
-            List {
-                Section {
+        List {
+            Section {
                 HStack {
                     TextField("新しいタスク", text: $newTitle)
                         .textInputAutocapitalization(.never)
@@ -88,14 +90,14 @@ struct TaskListView: View {
                 }
             }
 
-                Section {
-                    if store.items.isEmpty {
-                        HStack {
-                            Image(systemName: "sparkles")
-                            Text("ここにタスクが一覧表示されます（DebugシードはTASKS_FORCE_SEED=1）")
-                                .foregroundStyle(.secondary)
-                        }
-                    } else {
+            Section {
+                if store.items.isEmpty {
+                    HStack {
+                        Image(systemName: "sparkles")
+                        Text("ここにタスクが一覧表示されます（DebugシードはTASKS_FORCE_SEED=1）")
+                            .foregroundStyle(.secondary)
+                    }
+                } else {
                     ForEach(store.items) { item in
                         HStack(spacing: 12) {
                             Button(action: { store.toggle(item.id) }) {
@@ -144,7 +146,7 @@ struct TaskListView: View {
                 .padding(.horizontal, 10)
                 .background(status.accentColor.opacity(0.15), in: Capsule())
 
-            if tasks.isEmpty && store.items.isEmpty && status == .todo {
+            if tasks.isEmpty, store.items.isEmpty, status == .todo {
                 Text("ボードは空です。タスクを追加して列に振り分けましょう")
                     .font(.callout)
                     .foregroundStyle(.secondary)
@@ -286,19 +288,22 @@ struct TaskListView: View {
     }
 
     private func currentWeek() -> [Date] {
-        guard let weekStart = calendar.date(from: calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: selectedDate)) else {
+        guard let weekStart = calendar.date(from: calendar.dateComponents(
+            [.yearForWeekOfYear, .weekOfYear],
+            from: selectedDate
+        )) else {
             return []
         }
-        return (0..<7).compactMap { offset in
+        return (0 ..< 7).compactMap { offset in
             calendar.date(byAdding: .day, value: offset, to: weekStart)
         }
     }
 
     private func iconName(for status: TaskItem.Status) -> String {
         switch status {
-        case .todo: return "tray"
-        case .doing: return "hammer"
-        case .done: return "checkmark.circle"
+            case .todo: "tray"
+            case .doing: "hammer"
+            case .done: "checkmark.circle"
         }
     }
 

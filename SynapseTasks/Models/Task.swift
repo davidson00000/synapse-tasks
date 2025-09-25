@@ -11,25 +11,25 @@ struct TaskItem: Identifiable, Codable, Hashable {
 
         var displayName: String {
             switch self {
-            case .todo: return "Todo"
-            case .doing: return "Doing"
-            case .done: return "Done"
+                case .todo: "Todo"
+                case .doing: "Doing"
+                case .done: "Done"
             }
         }
 
         var accentColor: Color {
             switch self {
-            case .todo: return .gray
-            case .doing: return .blue
-            case .done: return .green
+                case .todo: .gray
+                case .doing: .blue
+                case .done: .green
             }
         }
 
         var displayOrder: Int {
             switch self {
-            case .todo: return 0
-            case .doing: return 1
-            case .done: return 2
+                case .todo: 0
+                case .doing: 1
+                case .done: 2
             }
         }
     }
@@ -44,10 +44,12 @@ struct TaskItem: Identifiable, Codable, Hashable {
         set { status = newValue ? .done : (status == .done ? .todo : status) }
     }
 
-    init(id: UUID = .init(),
-         title: String,
-         status: Status = .todo,
-         dueDate: Date? = nil) {
+    init(
+        id: UUID = .init(),
+        title: String,
+        status: Status = .todo,
+        dueDate: Date? = nil
+    ) {
         self.id = id
         self.title = title
         self.status = status
@@ -173,7 +175,7 @@ final class TaskStore: ObservableObject {
         if overwriting {
             items = seedItems
         } else {
-            let existingIDs = Set(items.map { $0.id })
+            let existingIDs = Set(items.map(\.id))
             let merged = seedItems.filter { !existingIDs.contains($0.id) }
             guard !merged.isEmpty else { return }
             items.append(contentsOf: merged)
@@ -182,33 +184,42 @@ final class TaskStore: ObservableObject {
 }
 
 #if DEBUG
-extension TaskItem {
-    static func debugSeed(reference: Date = Date(), calendar inputCalendar: Calendar = .current) -> [TaskItem] {
-        var calendar = inputCalendar
-        calendar.locale = Locale(identifier: "ja_JP")
-        calendar.timeZone = TimeZone.current
-        let today = calendar.startOfDay(for: reference)
+    extension TaskItem {
+        static func debugSeed(reference: Date = Date(), calendar inputCalendar: Calendar = .current) -> [TaskItem] {
+            var calendar = inputCalendar
+            calendar.locale = Locale(identifier: "ja_JP")
+            calendar.timeZone = TimeZone.current
+            let today = calendar.startOfDay(for: reference)
 
-        let previousDay = calendar.date(byAdding: .day, value: -1, to: today)
-        let friday = calendar.nextDate(after: today,
-                                       matching: DateComponents(weekday: 6),
-                                       matchingPolicy: .nextTimePreservingSmallerComponents) ?? today
-        let nextWeekPlanning = calendar.date(byAdding: .day, value: 3, to: today)
+            let previousDay = calendar.date(byAdding: .day, value: -1, to: today)
+            let friday = calendar.nextDate(
+                after: today,
+                matching: DateComponents(weekday: 6),
+                matchingPolicy: .nextTimePreservingSmallerComponents
+            ) ?? today
+            let nextWeekPlanning = calendar.date(byAdding: .day, value: 3, to: today)
 
-        let definitions: [(uuid: UUID, title: String, status: TaskItem.Status, date: Date?)] = [
-            (UUID(uuidString: "11111111-1111-1111-1111-111111111111") ?? UUID(), "仕様確認", .todo, nil),
-            (UUID(uuidString: "22222222-2222-2222-2222-222222222222") ?? UUID(), "API実装", .doing, today),
-            (UUID(uuidString: "33333333-3333-3333-3333-333333333333") ?? UUID(), "コードレビュー", .done, previousDay),
-            (UUID(uuidString: "44444444-4444-4444-4444-444444444444") ?? UUID(), "週次ミーティング", .todo, friday),
-            (UUID(uuidString: "55555555-5555-5555-5555-555555555555") ?? UUID(), "バックログ整理", .doing, nextWeekPlanning)
-        ]
+            let definitions: [(uuid: UUID, title: String, status: TaskItem.Status, date: Date?)] = [
+                (UUID(uuidString: "11111111-1111-1111-1111-111111111111") ?? UUID(), "仕様確認", .todo, nil),
+                (UUID(uuidString: "22222222-2222-2222-2222-222222222222") ?? UUID(), "API実装", .doing, today),
+                (UUID(uuidString: "33333333-3333-3333-3333-333333333333") ?? UUID(), "コードレビュー", .done, previousDay),
+                (UUID(uuidString: "44444444-4444-4444-4444-444444444444") ?? UUID(), "週次ミーティング", .todo, friday),
+                (
+                    UUID(uuidString: "55555555-5555-5555-5555-555555555555") ?? UUID(),
+                    "バックログ整理",
+                    .doing,
+                    nextWeekPlanning
+                ),
+            ]
 
-        return definitions.map { definition in
-            TaskItem(id: definition.uuid,
-                     title: definition.title,
-                     status: definition.status,
-                     dueDate: definition.date)
+            return definitions.map { definition in
+                TaskItem(
+                    id: definition.uuid,
+                    title: definition.title,
+                    status: definition.status,
+                    dueDate: definition.date
+                )
+            }
         }
     }
-}
 #endif
