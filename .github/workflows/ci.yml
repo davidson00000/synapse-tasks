@@ -8,12 +8,12 @@ on:
 jobs:
   ui-shot:
     runs-on: macos-14
-    timeout-minutes: 35
+    timeout-minutes: 40
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Select Xcode (16.2 if present, otherwise default)
+      - name: Select Xcode (prefer 16.2)
         shell: bash
         run: |
           set -euxo pipefail
@@ -24,25 +24,50 @@ jobs:
           fi
           xcodebuild -version
 
-      # シミュレータの状態が怪しい時に安定させる
-      - name: Reset simulators (one-time hygiene)
+      # シミュレータの汚れを落としてから開始
+      - name: Reset Simulators (hygiene)
         shell: bash
         run: |
           set -euxo pipefail
           xcrun simctl shutdown all || true
           xcrun simctl erase all || true
-    
-      - name: Sync legacy path (temporary fix)
+
+      # デバイスを堅牢に検出/作成（iPhone 15 が無ければ iPhone SE 3rd で作成）
+      - name: Detect/Create Simulator (return UDID)
+        id: dev
         shell: bash
         run: |
           set -euxo pipefail
-          mkdir -p SynapseTasks/Views
-          # 新実装を旧パスにも複製（XcodeのCompile Sourcesが旧パスを指している対策）
-          cp -f Features/ListUI/TaskListView.swift SynapseTasks/Views/TaskListView.swift || true
+          # 既存デバイスから iPhone 系の UDID を優先的に取得
+          UDID="$(xcrun simctl list devices available | awk -F '[()]' '/iPhone/ {print $2; exit}')"
+          if [ -z "${UDID}" ]; then
+            # ランタイムを推測
+            RUNTIME="$(xcrun simctl list runtimes | awk -F '[()]' '/iOS .* \\(/ {print $2}' | tail -n1)"
+            # まず iPhone 15 を試行、無ければ iPhone SE(3rd)
+            if xcrun simctl list devicetypes | grep -q "iPhone 15"; then
+              DEVTYPE="com.apple.CoreSimulator.SimDeviceType.iPhone-15"
+            else
+              DEVTYPE="com.apple.CoreSimulator.SimDeviceType.iPhone-SE-3rd-generation"
+            fi
+            xcrun simctl create "CI Device" "${DEVTYPE}" "${RUNTIME}" >/dev/null
+            UDID="$(xcrun simctl list devices | awk -F '[()]' '/CI Device/ {print $2; exit}')"
+          fi
+          echo "udid=${UDID}" >> "$GITHUB_OUTPUT"
+          # Boot しておく
+          xcrun simctl boot "${UDID}" || true
 
+      # （バンドエイド）旧パス参照対策：新UIファイルを旧パスへ複製
+      - name: Sync legacy path for TaskListView (temporary)
+        shell: bash
+        run: |
+          set -euxo pipefail
+          if [ -f "Features/ListUI/TaskListView.swift" ]; then
+            mkdir -p SynapseTasks/Views
+            cp -f Features/ListUI/TaskListView.swift SynapseTasks/Views/TaskListView.swift
+          fi
 
-      # ======== ビルド with ログ採取 ========
-      - name: Build (Debug) with full logs
+      # ビルド：UDID 固定 + ログ採取 + AssetSymbols 無効化（Exit65回避の暫定）
+      - name: Build (Debug) with logs (id-based destination)
         shell: bash
         run: |
           set -euxo pipefail
@@ -50,12 +75,14 @@ jobs:
           xcodebuild \
             -scheme "SynapseTasks" \
             -configuration Debug \
-            -destination 'platform=iOS Simulator,name=iPhone 15' \
+            -destination "id=${{ steps.dev.outputs.udid }}" \
             -derivedDataPath build \
+            COMPILER_INDEX_STORE_ENABLE=NO \
+            ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS=NO \
+            ONLY_ACTIVE_ARCH=YES \
             build \
           | tee build-logs/xcodebuild.log
-
-          # 重要行を抽出（Swiftのerror, warning類や致命ログ）
+          # 重要行抽出
           sed -n '1,200p' build-logs/xcodebuild.log > build-logs/xcodebuild.head.log || true
           grep -n -E "error:|fatal error:|note:|warning:" build-logs/xcodebuild.log > build-logs/xcodebuild.errors.log || true
 
@@ -66,64 +93,35 @@ jobs:
           path: build-logs
           retention-days: 7
 
-      # ======== UDID / APP / BUNDLE 検出 & インストール ========
-      - name: Resolve UDID, APP, BUNDLE_ID and Install
+      # .app と Bundle ID を確定
+      - name: Resolve APP & BUNDLE_ID
         id: detect
         shell: bash
         run: |
           set -euxo pipefail
-
-          # UDID 検出 & Boot
-          UDID="$(xcrun simctl list devices | awk -F '[()]' '/iPhone 15 .*Booted|iPhone 15 .*Shutdown/ {print $2; exit}')"
-          if [ -z "${UDID}" ]; then
-            # 無ければ作成（最新のiOSランタイムを推測）
-            RUNTIME=$(xcrun simctl list runtimes | awk -F '[()]' '/iOS .* \(.*\)/ {print $2}' | tail -n1)
-            DEVTYPE="com.apple.CoreSimulator.SimDeviceType.iPhone-15"
-            xcrun simctl create "CI iPhone 15" "${DEVTYPE}" "${RUNTIME}" > /dev/null
-            UDID="$(xcrun simctl list devices | awk -F '[()]' '/CI iPhone 15/ {print $2; exit}')"
-          fi
-          xcrun simctl boot "${UDID}" || true
-
-          # APP パス
           APP_PATH="$(find build/Build/Products/Debug-iphonesimulator -maxdepth 1 -name '*.app' | head -n1)"
-          echo "APP_PATH=${APP_PATH}"
           if [ -z "${APP_PATH}" ]; then
             echo "No .app found under derived data." >&2
-            exit 1
+            exit 65
           fi
+          BID="$(xcodebuild -showBuildSettings -scheme "SynapseTasks" -configuration Debug | awk -F ' = ' '/PRODUCT_BUNDLE_IDENTIFIER/ {print $2; exit}')"
+          echo "app_path=${APP_PATH}"   >> "$GITHUB_OUTPUT"
+          echo "bundle_id=${BID}"       >> "$GITHUB_OUTPUT"
 
-          # BUNDLE ID
-          BUNDLE_ID="$(xcodebuild -showBuildSettings -scheme "SynapseTasks" -configuration Debug | awk -F' = ' '/PRODUCT_BUNDLE_IDENTIFIER/ {print $2; exit}')"
-          echo "BUNDLE_ID=${BUNDLE_ID}"
-
-          # Install
-          xcrun simctl install "${UDID}" "${APP_PATH}"
-
-          # Export to outputs
-          {
-            echo "udid=${UDID}"
-            echo "bundle_id=${BUNDLE_ID}"
-            echo "app_path=${APP_PATH}"
-          } >> "$GITHUB_OUTPUT"
-
-      # ======== 起動 (ENV付与) → スクショ ========
-      - name: Launch with ENV and Screenshot (script)
+      # 起動→撮影（引数無しでOK：スクリプトが自動補完）
+      - name: Launch with ENV and Screenshot
         env:
           TASKS_SCREENSHOT_TAB: board
           TASKS_SELECTED_WEEKDAY: mon
+          UDID: ${{ steps.dev.outputs.udid }}
+          BUNDLE_ID: ${{ steps.detect.outputs.bundle_id }}
+          APP_PATH: ${{ steps.detect.outputs.app_path }}
         shell: bash
         run: |
           set -euxo pipefail
           chmod +x scripts/ui_capture.sh
-          mkdir -p artifacts/ui
-
-          scripts/ui_capture.sh \
-            --scheme "SynapseTasks" \
-            --derived-data "build" \
-            --udid "${{ steps.detect.outputs.udid }}" \
-            --bundle-id "${{ steps.detect.outputs.bundle_id }}" \
-            --app-path "${{ steps.detect.outputs.app_path }}" \
-            --screenshot "artifacts/ui/board_mon.png"
+          # 環境変数だけ渡して裸呼び出し（引数不足エラーは出ない実装にしてある）
+          scripts/ui_capture.sh
 
       - name: Upload UI Artifacts
         uses: actions/upload-artifact@v4
@@ -132,14 +130,13 @@ jobs:
           path: artifacts/ui
           retention-days: 7
 
-      # ======== 失敗時にもログを必ず残す ========
-      - name: Always upload logs (post)
+      - name: Always upload simulator logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: post-run-logs
+          name: simulator-logs
           path: |
             ~/Library/Logs/CoreSimulator
-            build-logs
+            ~/Library/Developer/CoreSimulator/Devices
           retention-days: 7
 
