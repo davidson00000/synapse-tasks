@@ -14,13 +14,13 @@ echo "[info] Scheme  : $SCHEME"
 echo "[info] Using runtime: $RUNTIME"
 echo "[info] Device type  : $DEVTYPE"
 
-# 1) create & boot simulator
+# 1) boot simulator
 UDID=$(xcrun simctl create "CI-Temp-$(date +%s)" "$DEVTYPE" "$RUNTIME")
 echo "[info] Created simulator: $UDID"
 xcrun simctl boot "$UDID"
 xcrun simctl bootstatus "$UDID" -b
 
-# 2) build for that device
+# 2) build
 xcodebuild \
   -project "$PROJECT" \
   -scheme "$SCHEME" \
@@ -44,21 +44,29 @@ BUNDLE_ID=$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$APP_PATH/In
 echo "[info] BundleID: $BUNDLE_ID"
 
 # 5) install
-set +e
-xcrun simctl install "$UDID" "$APP_PATH"
-RC=$?
-set -e
-if [ $RC -ne 0 ]; then
-  echo "[error] install failed (rc=$RC). Info.plist dump:"
+if ! xcrun simctl install "$UDID" "$APP_PATH"; then
+  echo "[error] install failed. Info.plist:"
   /usr/libexec/PlistBuddy -c "Print" "$APP_PATH/Info.plist" || true
-  exit $RC
+  exit 1
 fi
 
-# helper: launch with env and take screenshot
-capture_env () {
+# helper: launch with ENV + ARGS and take screenshot
+capture () {
   local name="$1"; shift
+  local tab="$1"; shift || true
+  local weekday="${1:-}"
+
   xcrun simctl terminate "$UDID" "$BUNDLE_ID" >/dev/null 2>&1 || true
-  xcrun simctl launch "$UDID" "$BUNDLE_ID" --env "$@"
+
+  # pass both env and args (app may read either)
+  local envs=(--env "TASKS_SCREENSHOT_TAB=$tab")
+  local args=(--args "TASKS_SCREENSHOT_TAB=$tab")
+  if [ -n "$weekday" ]; then
+    envs+=(--env "TASKS_SELECTED_WEEKDAY=$weekday")
+    args+=( "TASKS_SELECTED_WEEKDAY=$weekday" )
+  fi
+
+  xcrun simctl launch "$UDID" "$BUNDLE_ID" "${envs[@]}" "${args[@]}" || true
   sleep 2
   xcrun simctl io "$UDID" screenshot "$ARTIFACTS/$name.png"
 }
@@ -70,10 +78,10 @@ xcrun simctl launch "$UDID" "$BUNDLE_ID" || true
 sleep 2
 xcrun simctl io "$UDID" screenshot "$ARTIFACTS/02_app_default.png"
 
-# 7) distinct screens via ENV (app expects TASKS_* keys)
-capture_env "03_list"  TASKS_SCREENSHOT_TAB=list
-capture_env "04_board" TASKS_SCREENSHOT_TAB=board
-capture_env "05_week"  TASKS_SCREENSHOT_TAB=week TASKS_SELECTED_WEEKDAY=thu
+# 7) distinct screens
+capture "03_list"  "list"
+capture "04_board" "board"
+capture "05_week"  "week" "thu"
 
 # 8) cleanup
 xcrun simctl shutdown "$UDID"
