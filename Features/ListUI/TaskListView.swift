@@ -5,43 +5,38 @@ struct TaskListView: View {
     enum Tab: String, CaseIterable, Identifiable {
         case list
         case board
-        case weekly
+        case week
 
         var id: String { rawValue }
 
         var label: String {
             switch self {
-                case .list: "リスト"
-                case .board: "ボード"
-                case .weekly: "週間"
+            case .list: return "リスト"
+            case .board: return "ボード"
+            case .week: return "週間"
             }
         }
     }
 
     @EnvironmentObject private var store: TaskStore
+    #if DEBUG
+    @EnvironmentObject private var router: AppRouter
+    #endif
     @State private var newTitle = ""
-    @State private var selectedTab: Tab
-    @State private var selectedDate: Date
+    @State private var selectedTab: Tab = .list
+    @State private var selectedDate = Date()
 
-    private let calendar: Calendar
-
-    init(
-        initialTab: Tab = .list,
-        initialDate: Date = Date(),
-        calendar: Calendar = Calendar(identifier: .gregorian)
-    ) {
-        _selectedTab = State(initialValue: initialTab)
-        _selectedDate = State(initialValue: calendar.startOfDay(for: initialDate))
-        var calendarCopy = calendar
-        calendarCopy.locale = Locale(identifier: "ja_JP")
-        calendarCopy.firstWeekday = 2
-        self.calendar = calendarCopy
-    }
+    private let calendar: Calendar = {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.locale = Locale(identifier: "ja_JP")
+        calendar.firstWeekday = 2
+        return calendar
+    }()
 
     var body: some View {
         NavigationStack {
             VStack(spacing: 16) {
-                Picker("ビュー", selection: $selectedTab) {
+                Picker("ビュー", selection: tabSelectionBinding) {
                     ForEach(Tab.allCases) { tab in
                         Text(tab.label).tag(tab)
                     }
@@ -55,17 +50,26 @@ struct TaskListView: View {
             .padding(.bottom, 12)
             .navigationTitle("Synapse Tasks")
         }
+        #if DEBUG
+        .onAppear(perform: syncRouterToState)
+        .onReceive(router.$selectedTab) { _ in
+            syncRouterToState()
+        }
+        .onReceive(router.$selectedWeekday) { _ in
+            syncRouterToState()
+        }
+        #endif
     }
 
     @ViewBuilder
     private var content: some View {
         switch selectedTab {
-            case .list:
-                listView
-            case .board:
-                boardView
-            case .weekly:
-                weeklyView
+        case .list:
+            listView
+        case .board:
+            boardView
+        case .week:
+            weeklyView
         }
     }
 
@@ -266,6 +270,9 @@ struct TaskListView: View {
             ForEach(week, id: \.self) { date in
                 Button(action: {
                     selectedDate = date
+                    #if DEBUG
+                    router.selectedWeekday = weekdayCode(for: date)
+                    #endif
                 }, label: {
                     VStack(spacing: 4) {
                         Text(shortWeekdaySymbol(for: date))
@@ -289,10 +296,10 @@ struct TaskListView: View {
     }
 
     private func currentWeek(containing date: Date) -> [Date] {
-        guard let startOfWeek = calendar.date(from: calendar.dateComponents(
-            [.yearForWeekOfYear, .weekOfYear],
-            from: date
-        )) else {
+        guard let startOfWeek = calendar.date(from: calendar.dateComponents([
+            .yearForWeekOfYear,
+            .weekOfYear,
+        ], from: date)) else {
             return []
         }
         return (0 ..< 7).compactMap { offset in
@@ -323,22 +330,85 @@ struct TaskListView: View {
 
     private func color(for status: TaskItem.Status) -> Color {
         switch status {
-            case .todo: .blue
-            case .doing: .orange
-            case .done: .green
+        case .todo: return .blue
+        case .doing: return .orange
+        case .done: return .green
         }
     }
 
     private func emptyMessage(for status: TaskItem.Status) -> String {
         switch status {
-            case .todo:
-                "Todo 列は空です。新しいタスクを追加して計画を立てましょう。"
-            case .doing:
-                "Doing 列には進行中のタスクが表示されます。ステータスを切り替えてみてください。"
-            case .done:
-                "Done 列は完了したタスクが並びます。達成した項目はここで振り返りましょう。"
+        case .todo:
+            return "Todo 列は空です。新しいタスクを追加して計画を立てましょう。"
+        case .doing:
+            return "Doing 列には進行中のタスクが表示されます。ステータスを切り替えてみてください。"
+        case .done:
+            return "Done 列は完了したタスクが並びます。達成した項目はここで振り返りましょう。"
         }
     }
+
+    private var tabSelectionBinding: Binding<Tab> {
+        #if DEBUG
+        Binding(
+            get: { selectedTab },
+            set: { newValue in
+                selectedTab = newValue
+                router.selectedTab = newValue.rawValue
+            }
+        )
+        #else
+        Binding(
+            get: { selectedTab },
+            set: { selectedTab = $0 }
+        )
+        #endif
+    }
+
+    #if DEBUG
+    private func syncRouterToState() {
+        if let tab = Tab(rawValue: router.selectedTab) {
+            selectedTab = tab
+        }
+        if let code = router.selectedWeekday,
+           let date = resolveDate(for: code) {
+            selectedDate = date
+        }
+    }
+
+    private func resolveDate(for weekdayCode: String) -> Date? {
+        let mapping: [String: Int] = [
+            "sun": 1,
+            "mon": 2,
+            "tue": 3,
+            "wed": 4,
+            "thu": 5,
+            "fri": 6,
+            "sat": 7,
+        ]
+        guard let weekday = mapping[weekdayCode.lowercased()] else { return nil }
+        guard let startOfWeek = calendar.date(from: calendar.dateComponents([
+            .yearForWeekOfYear,
+            .weekOfYear,
+        ], from: Date())) else {
+            return nil
+        }
+        return calendar.date(byAdding: .day, value: weekday - 1, to: startOfWeek)
+    }
+
+    private func weekdayCode(for date: Date) -> String {
+        let mapping: [Int: String] = [
+            1: "sun",
+            2: "mon",
+            3: "tue",
+            4: "wed",
+            5: "thu",
+            6: "fri",
+            7: "sat",
+        ]
+        let weekday = calendar.component(.weekday, from: date)
+        return mapping[weekday] ?? "mon"
+    }
+    #endif
 }
 
 private extension DateFormatter {
