@@ -209,7 +209,7 @@ final class TaskStore: ObservableObject {
                     "バックログ整理",
                     .doing,
                     nextWeekPlanning
-                ),
+                )
             ]
 
             return definitions.map { definition in
