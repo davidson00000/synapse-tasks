@@ -271,7 +271,7 @@ extension TaskItem {
                 title: "バックログ整理",
                 status: .doing,
                 dueDate: calendar.date(byAdding: .day, value: 3, to: today)
-            ),
+            )
         ]
     }
 }
