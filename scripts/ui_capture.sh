@@ -3,88 +3,88 @@ set -euo pipefail
 
 PROJECT="${PROJECT:-SynapseTasks.xcodeproj}"
 SCHEME="${SCHEME:-SynapseTasks}"
-# 未指定でも動く。name 指定がなければ自動で最新 iPhone を選ぶ
-DESTINATION="${DESTINATION:-}"
-
 echo "[info] Project : $PROJECT"
 echo "[info] Scheme  : $SCHEME"
-echo "[info] Destenv : ${DESTINATION:-<auto>}"
 
-# --- スキーム存在チェック ---
+# --- scheme check ---
 if ! xcodebuild -list -project "$PROJECT" | awk '/Schemes:/,0' | grep -q -E "^[[:space:]]+$SCHEME$"; then
   echo "[error] Scheme '$SCHEME' not found in $PROJECT" >&2
   xcodebuild -list -project "$PROJECT" || true
   exit 2
 fi
 
-# --- デバイス自動解決（name 未指定なら最新の iPhone） ---
-if [[ -z "${DESTINATION}" ]]; then
-  # 一番新しい "iPhone " デバイスのうち、起動可能なものを選択
-  CANDIDATE=$(xcrun simctl list devices available | \
-              grep -E "iPhone [0-9]+" | \
-              tail -n1 | \
-              sed -E 's/^[[:space:]]*([^()]+) .*/\1/')
-  if [[ -z "${CANDIDATE}" ]]; then
-    echo "[warn] No iPhone simulator found; falling back to generic"
-    DESTINATION="platform=iOS Simulator,name=iPhone 15"
-  else
-    DESTINATION="platform=iOS Simulator,name=${CANDIDATE}"
-  fi
+# --- pick latest iOS runtime & a stable device type ---
+RUNTIME=$(xcrun simctl list runtimes | awk '/iOS/{print $NF}' | tail -n1)
+DEVTYPE="com.apple.CoreSimulator.SimDeviceType.iPhone-15"
+if [[ -z "${RUNTIME:-}" ]]; then
+  echo "[error] No iOS runtimes found"; xcrun simctl list runtimes; exit 3
 fi
-echo "[info] Destination resolved to: $DESTINATION"
+echo "[info] Using runtime: $RUNTIME"
+echo "[info] Device type  : $DEVTYPE"
 
-# --- ビルド（派生ディレクトリ固定） ---
+# --- create a fresh temp device (avoid flaky preinstalled ones) ---
+DEVICE_NAME="CI-Temp-$(date +%s)"
+UDID=$(xcrun simctl create "$DEVICE_NAME" "$DEVTYPE" "$RUNTIME")
+echo "[info] Created simulator: $DEVICE_NAME ($UDID)"
+
+cleanup() {
+  echo "[info] Cleanup: shutting down & deleting $UDID"
+  xcrun simctl shutdown "$UDID" >/dev/null 2>&1 || true
+  xcrun simctl delete   "$UDID" >/dev/null 2>&1 || true
+}
+trap cleanup EXIT
+
+# --- boot with timeout & one retry ---
+boot_and_wait() {
+  local id="$1"
+  echo "[info] Booting $id ..."
+  xcrun simctl boot "$id" || true
+  # -d 180: 180秒でタイムアウト。System App待ちでハングしない。
+  if ! xcrun simctl bootstatus "$id" -b -d 180; then
+    echo "[warn] bootstatus timeout for $id"
+    return 1
+  fi
+  return 0
+}
+boot_and_wait "$UDID" || {
+  echo "[warn] Retry after erase..."
+  xcrun simctl erase "$UDID" || true
+  boot_and_wait "$UDID" || { echo "[error] Simulator failed to boot"; exit 4; }
+}
+
+# --- build (DerivedData fixed) ---
 DERIVED="build"
 xcodebuild \
   -project "$PROJECT" \
   -scheme "$SCHEME" \
+  -destination "id=$UDID" \
   -sdk iphonesimulator \
-  -destination "$DESTINATION" \
   -configuration Debug \
   -derivedDataPath "$DERIVED" \
   clean build | xcpretty || true
 
 APP_DIR="$DERIVED/Build/Products/Debug-iphonesimulator"
 APP_PATH=$(ls -1 "$APP_DIR"/*.app | head -n1 || true)
-if [[ -z "${APP_PATH}" ]]; then
-  echo "[error] .app not found under $APP_DIR" >&2
-  exit 3
-fi
+[[ -z "${APP_PATH}" ]] && { echo "[error] .app not found under $APP_DIR"; exit 5; }
 echo "[info] Built app: $APP_PATH"
 
-# --- シミュレータの UDID を取得して起動 ---
-NAME=$(echo "$DESTINATION" | sed -n 's/.*name=\([^,]*\).*/\1/p')
-UDID=$(xcrun simctl list devices available | grep "$NAME (" | tail -n1 | sed -E 's/.*\(([A-F0-9-]+)\).*/\1/')
-if [[ -z "${UDID}" ]]; then
-  echo "[error] Could not resolve UDID for simulator '$NAME'" >&2
-  xcrun simctl list devices
-  exit 4
-fi
-
-# Boot if needed
-xcrun simctl bootstatus "$UDID" -b || xcrun simctl boot "$UDID"
-xcrun simctl bootstatus "$UDID" -b
-
-# --- Bundle ID を Info.plist から取得 ---
+# --- bundle id from Info.plist ---
 PLIST="$APP_PATH/Info.plist"
-if [[ ! -f "$PLIST" ]]; then
-  echo "[warn] Info.plist not found; skipping launch"
-else
-  BUNDLE_ID=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$PLIST" 2>/dev/null || true)
-  echo "[info] BundleID: ${BUNDLE_ID:-<unknown>}"
-fi
+BUNDLE_ID=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$PLIST" 2>/dev/null || true)
+echo "[info] BundleID: ${BUNDLE_ID:-<unknown>}"
 
-# --- インストール＆（分かれば）起動 ---
+# --- install & (optional) launch ---
 xcrun simctl install "$UDID" "$APP_PATH" || true
 if [[ -n "${BUNDLE_ID:-}" ]]; then
-  xcrun simctl launch "$UDID" "$BUNDLE_ID" || echo "[warn] launch failed; taking home screenshot instead"
+  xcrun simctl launch "$UDID" "$BUNDLE_ID" || echo "[warn] launch failed"
 fi
 
-# --- スクリーンショット ---
+# --- screenshot ---
 mkdir -p artifacts/screenshots
-xcrun simctl io "$UDID" screenshot "artifacts/screenshots/screen.png" || {
+if ! xcrun simctl io "$UDID" screenshot "artifacts/screenshots/screen.png"; then
   echo "[warn] screenshot failed; trying booted fallback"
   xcrun simctl io booted screenshot "artifacts/screenshots/screen.png" || true
-}
+fi
 
-echo "[info] Done. Screenshots under artifacts/screenshots"
+echo "[info] Done. See artifacts/screenshots/screen.png"
+

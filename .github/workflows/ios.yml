@@ -16,20 +16,17 @@ jobs:
         with:
           xcode-version: '16.x'
 
-      - name: Build (Simulator)
+      - name: Build for generic iOS Simulator (no device boot)
         env:
           PROJECT: SynapseTasks.xcodeproj
           SCHEME: SynapseTasks
-          DESTINATION: ""
         run: |
+          set -euo pipefail
           xcodebuild -list -project "$PROJECT"
-          # DESTINATION は scripts と同じロジックで自動解決できるようにするなら scripts を使う手もあり
           xcodebuild \
             -project "$PROJECT" \
-            -scheme "$SCHEME" \
-            -sdk iphonesimulator \
-            -destination 'platform=iOS Simulator,name=iPhone 15' \
+            -scheme  "$SCHEME" \
+            -destination 'generic/platform=iOS Simulator' \
             -configuration Debug \
             build
-
 
