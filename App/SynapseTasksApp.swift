@@ -35,7 +35,8 @@ private struct LaunchSettings {
         self.calendar = calendar
 
         if let rawValue = environment["TASKS_SCREENSHOT_TAB"]?.lowercased(),
-           let tab = TaskListView.Tab(rawValue: rawValue) {
+           let tab = TaskListView.Tab(rawValue: rawValue)
+        {
             initialTab = tab
         } else {
             initialTab = .list
@@ -44,7 +45,8 @@ private struct LaunchSettings {
         let today = calendar.startOfDay(for: Date())
         if let weekdayValue = environment["TASKS_SELECTED_WEEKDAY"],
            let weekday = Int(weekdayValue),
-           (1 ... 7).contains(weekday) {
+           (1 ... 7).contains(weekday)
+        {
             initialDate = LaunchSettings.resolveDate(for: weekday, calendar: calendar, reference: today)
         } else {
             initialDate = today
