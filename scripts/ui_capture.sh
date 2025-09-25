@@ -7,14 +7,14 @@ SCHEME="${SCHEME:-SynapseTasks}"
 echo "[info] Project: $PROJECT"
 echo "[info] Scheme : $SCHEME"
 
-# スキームが存在するか軽く検証（見つからなければ即エラー）
-if ! xcodebuild -list -project "$PROJECT" | grep -E "^    Schemes:" -A50 | grep -qx "        ${SCHEME}"; then
+# スキームが存在するか軽く検証
+if ! xcodebuild -list -project "$PROJECT" | grep -A20 "Schemes:" | grep -q "^[[:space:]]*$SCHEME$"; then
   echo "Error: Scheme '$SCHEME' not found in $PROJECT" >&2
   xcodebuild -list -project "$PROJECT" || true
   exit 2
 fi
 
-# ここから先はビルド＆キャプチャ（例）
+# ビルド
 xcodebuild \
   -project "$PROJECT" \
   -scheme "$SCHEME" \
@@ -22,5 +22,6 @@ xcodebuild \
   -destination 'platform=iOS Simulator,name=iPhone 16,OS=18.0' \
   build
 
-# …スクショ処理…
+# TODO: ここに UI キャプチャ処理を追加
+echo "[info] Build completed, add screenshot commands here."
 

@@ -1,33 +1,31 @@
 name: UI Capture
+
 on:
-  workflow_dispatch:
   push:
-    branches: [ main, develop ]
+    branches: [ "main" ]
+  pull_request:
+
 jobs:
-  capture:
-    runs-on: macos-15
+  ui-capture:
+    runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
-      - name: Show Xcode env
+
+      - name: Preflight (verify repo state)
         run: |
-          xcodebuild -version
-          xcrun simctl list runtimes
-          xcrun simctl list devicetypes
-          xcodebuild -list -json || true
+          set -x
+          git rev-parse --short HEAD
+          git log -1 --oneline
+          ls -la
+          ls -la scripts || true
+          echo "---- head of scripts/ui_capture.sh ----"
+          head -n 40 scripts/ui_capture.sh || true
+
       - name: Build & Capture Screens
         env:
-          DEVICE_NAME: iPhone 17
-          WEEKDAY_FOR_WEEKLY: 3
-          CONFIG: Debug
+          PROJECT: SynapseTasks.xcodeproj
+          SCHEME: SynapseTasks
         run: |
           chmod +x scripts/ui_capture.sh
           ./scripts/ui_capture.sh
-      - name: Upload UI Captures
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: ui_captures
-          path: |
-            build/ui/*.png
-            ui_captures/**/*
-          if-no-files-found: warn
+
