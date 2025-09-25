@@ -1,0 +1,32 @@
+name: build-test
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-14
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode 16.x
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: '16.x'
+
+      - name: Build (Simulator)
+        env:
+          PROJECT: SynapseTasks.xcodeproj
+          SCHEME: SynapseTasks
+          DESTINATION: "platform=iOS Simulator,name=iPhone 16"
+        run: |
+          xcodebuild -list -project "$PROJECT"
+          xcodebuild \
+            -project "$PROJECT" \
+            -scheme  "$SCHEME" \
+            -sdk iphonesimulator \
+            -destination "$DESTINATION" \
+            build

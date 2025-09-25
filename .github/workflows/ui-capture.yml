@@ -3,7 +3,7 @@ name: UI Capture
 on:
   push:
     branches: [ "main" ]
-  pull_request:
+  workflow_dispatch:
 
 jobs:
   ui-capture:
@@ -12,15 +12,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # ★ Xcode 16 を選択（これで project format 77 を読めます）
-      - name: Select Xcode 16
+      # Xcode 16系を選択（16.2 などに自動追随）
+      - name: Select Xcode 16.x
         uses: maxim-lobanov/setup-xcode@v1
         with:
-        # どちらか一方でOK
-        # xcode-version: '16.2'   # ← 固定で16.2
-        xcode-version: '16.x'     # ← 16系の最新（今は16.2）
+          xcode-version: '16.x'
 
-      # 診断（いまのXcode/SDK/スキーム確認）
+      # 診断（Xcode/SDK/デバイス/スキームの確認）
       - name: Preflight (verify repo state)
         run: |
           set -x
@@ -31,14 +29,22 @@ jobs:
           git rev-parse --short HEAD
           head -n 40 scripts/ui_capture.sh || true
 
-      # ビルド＋スクリーンキャプチャ（スクリプト実行）
+      # ビルド & キャプチャ（スクリプトでまとめて実行）
       - name: Build & Capture Screens
         env:
           PROJECT: SynapseTasks.xcodeproj
           SCHEME: SynapseTasks
-          # OSの指定が要らない環境もあるのでデフォルトは「名前のみ」指定
           DESTINATION: "platform=iOS Simulator,name=iPhone 16"
         run: |
           chmod +x scripts/ui_capture.sh
           ./scripts/ui_capture.sh
+
+      # 任意: スクショがあれば成果物として保存
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshots
+          path: artifacts/screenshots
+          if-no-files-found: ignore
 

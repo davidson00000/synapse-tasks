@@ -1,0 +1,31 @@
+name: lint
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  lint:
+    runs-on: macos-14
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # ここで全部Homebrew経由にします（pipは使わない）
+      - name: Install tooling (brew)
+        run: |
+          brew update
+          brew install xcodegen swiftformat swiftlint pre-commit
+
+      - name: xcodegen generate (if project.yml exists)
+        run: |
+          if [ -f project.yml ]; then
+            xcodegen generate
+          else
+            echo "project.yml not found, skipping xcodegen"
+          fi
+
+      - name: Run SwiftFormat / SwiftLint via pre-commit
+        run: pre-commit run --all-files
