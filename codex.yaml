@@ -1,0 +1,17 @@
+version: 1
+meta:
+  name: Task Synapse Map – CODEX Pipeline
+  artifacts_dir: runs/last
+
+inputs:
+  feedback_file: feedback/todo.md
+
+steps:
+  - id: plan
+  - id: impl
+  - id: build
+  - id: test
+  - id: ui-capture
+  - id: report
+  - id: commit
+

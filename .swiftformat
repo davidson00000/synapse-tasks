@@ -1,0 +1,6 @@
+--swiftversion 5.10
+--indent 4
+--maxwidth 120
+--wraparguments before-first
+--wrapcollections before-first
+--indentcase true

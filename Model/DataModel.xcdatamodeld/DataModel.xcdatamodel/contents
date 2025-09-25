@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<model type="com.apple.IDECoreDataModeler.DataModel" documentVersion="1.0" lastSavedToolsVersion="24299" systemVersion="24G90" minimumToolsVersion="Automatic" sourceLanguage="Swift" userDefinedModelVersionIdentifier="">
+    <entity name="Category" representedClassName="Category" syncable="YES">
+        <attribute name="id" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="name" attributeType="String"/>
+        <relationship name="tasks" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="TaskEntity" inverseName="category" inverseEntity="TaskEntity"/>
+        <fetchIndex name="byNameIndex">
+            <fetchIndexElement property="name" type="Binary" order="ascending"/>
+        </fetchIndex>
+    </entity>
+    <entity name="Connection" representedClassName="Connection" syncable="YES">
+        <attribute name="createdAt" attributeType="Date"/>
+        <attribute name="id" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="kind" attributeType="String" defaultValueString="related"/>
+        <relationship name="fromTask" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="TaskEntity" inverseName="connectionsFrom" inverseEntity="TaskEntity"/>
+        <relationship name="toTask" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="TaskEntity" inverseName="connectionsTo" inverseEntity="TaskEntity"/>
+    </entity>
+    <entity name="NodeLayout" representedClassName="NodeLayout" syncable="YES">
+        <attribute name="locked" attributeType="Boolean" defaultValueString="NO"/>
+        <attribute name="x" attributeType="Double"/>
+        <attribute name="y" attributeType="Double"/>
+        <relationship name="task" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="TaskEntity" inverseName="node" inverseEntity="TaskEntity"/>
+    </entity>
+    <entity name="Tag" representedClassName="Tag" syncable="YES">
+        <attribute name="id" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="name" attributeType="String"/>
+        <relationship name="tasks" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="TaskEntity" inverseName="tags" inverseEntity="TaskEntity"/>
+        <fetchIndex name="byNameIndex">
+            <fetchIndexElement property="name" type="Binary" order="ascending"/>
+        </fetchIndex>
+    </entity>
+    <entity name="TaskEntity" representedClassName="TaskEntity" syncable="YES" codeGenerationType="class">
+        <attribute name="createdAt" attributeType="Date"/>
+        <attribute name="detail" optional="YES" attributeType="String"/>
+        <attribute name="dueDate" optional="YES" attributeType="Date"/>
+        <attribute name="id" attributeType="UUID" usesScalarValueType="NO" spotlightIndexingEnabled="YES"/>
+        <attribute name="priority" attributeType="Integer 16" defaultValueString="3"/>
+        <attribute name="status" attributeType="String" defaultValueString="todo"/>
+        <attribute name="title" attributeType="String" defaultValueString="todo"/>
+        <attribute name="updatedAt" attributeType="Date"/>
+        <relationship name="category" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Category" inverseName="tasks" inverseEntity="Category"/>
+        <relationship name="connectionsFrom" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="Connection" inverseName="fromTask" inverseEntity="Connection"/>
+        <relationship name="connectionsTo" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="Connection" inverseName="toTask" inverseEntity="Connection"/>
+        <relationship name="node" optional="YES" maxCount="1" deletionRule="Cascade" destinationEntity="NodeLayout" inverseName="task" inverseEntity="NodeLayout"/>
+        <relationship name="tags" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="Tag" inverseName="tasks" inverseEntity="Tag"/>
+        <fetchIndex name="byDueDateIndex">
+            <fetchIndexElement property="dueDate" type="Binary" order="ascending"/>
+        </fetchIndex>
+        <fetchIndex name="byIdIndex">
+            <fetchIndexElement property="id" type="Binary" order="ascending"/>
+        </fetchIndex>
+        <fetchIndex name="byStatusIndex">
+            <fetchIndexElement property="status" type="Binary" order="ascending"/>
+        </fetchIndex>
+        <fetchIndex name="byTitleIndex">
+            <fetchIndexElement property="title" type="Binary" order="ascending"/>
+        </fetchIndex>
+    </entity>
+</model>

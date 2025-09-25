@@ -1,0 +1,1146 @@
+diff --git a/.github/workflows/ios.yml b/.github/workflows/ios.yml
+index c51fc7c..a304c9f 100644
+--- a/.github/workflows/ios.yml
++++ b/.github/workflows/ios.yml
+@@ -1,8 +1,19 @@
+ name: iOS CI
+ on: [push, pull_request]
+ jobs:
++  lint:
++    runs-on: macos-14
++    steps:
++      - uses: actions/checkout@v4
++      - run: brew install xcodegen swiftformat swiftlint
++      - run: pip3 install --user pre-commit
++      - run: xcodegen generate
++      - name: pre-commit (swiftformat & swiftlint)
++        run: ~/.local/bin/pre-commit run --all-files
++
+   build-test:
+     runs-on: macos-14
++    needs: lint
+     steps:
+       - uses: actions/checkout@v4
+       - run: brew install xcodegen
+diff --git a/App/SynapseTasksApp.swift b/App/SynapseTasksApp.swift
+index 277d0ff..15d669b 100644
+--- a/App/SynapseTasksApp.swift
++++ b/App/SynapseTasksApp.swift
+@@ -1,17 +1,22 @@
+-import CoreData
+ import SwiftUI
++import OSLog
+ 
+ @main
+ struct SynapseTasksApp: App {
+-    let persistenceController = PersistenceController.shared
+-
++    @StateObject private var store = TaskStore()
++    init() {
++        print("🔥 App init")
++        Logger(subsystem: "com.kousuke.synapsetasks", category: "lifecycle").info("App init")
++    }
+     var body: some Scene {
+         WindowGroup {
+-            TaskListView() // ← とりあえず一覧ビュー（後で差し替えOK）
+-                .environment(
+-                    \.managedObjectContext,
+-                    persistenceController.container.viewContext
+-                )
++            TaskListView()
++                .environmentObject(store)
++                .onAppear {
++                    print("👀 TaskListView root onAppear")
++                    Logger(subsystem: "com.kousuke.synapsetasks", category: "ui").info("TaskListView appeared")
++                }
+         }
+     }
+ }
++
+diff --git a/Model/Domain.swift b/Model/Domain.swift
+index 707b4a5..c08fbaa 100644
+--- a/Model/Domain.swift
++++ b/Model/Domain.swift
+@@ -1,92 +1,47 @@
+-import SwiftUI
+-
+-enum TaskStatus: Int16, CaseIterable {
+-    case todo = 0
+-    case doing = 1
+-    case done = 2
+-
+-    var displayName: String {
+-        switch self {
+-            case .todo:
+-                "To Do"
+-            case .doing:
+-                "Doing"
+-            case .done:
+-                "Done"
+-        }
+-    }
+-
+-    var icon: String {
+-        switch self {
+-            case .todo:
+-                "checklist"
+-            case .doing:
+-                "hammer"
+-            case .done:
+-                "checkmark.circle.fill"
+-        }
+-    }
+-
+-    var color: Color {
+-        switch self {
+-            case .todo:
+-                .blue
+-            case .doing:
+-                .orange
+-            case .done:
+-                .green
+-        }
+-    }
++// 例: Model/Domain.swift
++import Foundation
++
++struct Task: Identifiable, Codable, Equatable {
++  var id: UUID
++  var title: String
++  var due: Date?
++  var note: String?
++  var tags: [String] = []
+ }
+ 
+-enum TaskPriority: Int16, CaseIterable {
+-    case low = 0
+-    case medium = 1
+-    case high = 2
++// 例: 永続層の安全ラッパ
++enum Store {
++  static let url: URL = {
++    let dir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
++    return dir.appendingPathComponent("tasks.json")
++  }()
+ 
+-    var displayName: String {
+-        switch self {
+-            case .low:
+-                "Low"
+-            case .medium:
+-                "Medium"
+-            case .high:
+-                "High"
+-        }
++  static func load() -> [Task] {
++    guard let data = try? Data(contentsOf: url) else {
++      return Seed.defaultTasks   // ← 失敗してもデフォルト
+     }
+-}
+-
+-enum ConnectionKind: Int16, CaseIterable {
+-    case related = 0
+-    case dependsOn = 1
+-    case blockedBy = 2
+-
+-    var displayName: String {
+-        switch self {
+-            case .related:
+-                "Related"
+-            case .dependsOn:
+-                "Depends On"
+-            case .blockedBy:
+-                "Blocked By"
+-        }
++    do {
++      return try JSONDecoder().decode([Task].self, from: data)
++    } catch {
++      print("⚠️ decode failed: \(error)")
++      return Seed.defaultTasks
++    }
++  }
++
++  static func save(_ tasks: [Task]) {
++    do {
++      let data = try JSONEncoder().encode(tasks)
++      try data.write(to: url, options: .atomic)
++    } catch {
++      print("⚠️ save failed: \(error)")
+     }
++  }
+ }
+ 
+-extension TaskEntity {
+-    /// 既存値を壊さずに、nil/ゼロの項目だけ初期化
+-    func initializeIfNeeded(
+-        id: UUID = .init(),
+-        createdAt: Date? = nil,
+-        updatedAt: Date? = nil,
+-        statusRaw: Int16? = nil,
+-        priorityRaw: Int16? = nil
+-    ) {
+-        let now = Date()
+-        if self.id == nil { self.id = id }
+-        if self.createdAt == nil { self.createdAt = createdAt ?? now }
+-        if self.updatedAt == nil { self.updatedAt = updatedAt ?? now }
+-        if self.statusRaw == 0 { self.statusRaw = statusRaw ?? TaskStatus.todo.rawValue }
+-        if self.priorityRaw == 0 { self.priorityRaw = priorityRaw ?? TaskPriority.medium.rawValue }
+-    }
++// 例: Model/Seed.swift
++enum Seed {
++  static let defaultTasks: [Task] = [
++    .init(id: UUID(), title: "Write spec", due: .now.addingTimeInterval(86400)),
++    .init(id: UUID(), title: "Implement ListUI"),
++  ]
+ }
+diff --git a/SynapseTasks.xcodeproj/project.pbxproj b/SynapseTasks.xcodeproj/project.pbxproj
+index 6ba448d..147d549 100644
+--- a/SynapseTasks.xcodeproj/project.pbxproj
++++ b/SynapseTasks.xcodeproj/project.pbxproj
+@@ -7,28 +7,18 @@
+ 	objects = {
+ 
+ /* Begin PBXBuildFile section */
+-		3737B4B11EE76F44B23DBF31 /* App.swift in Sources */ = {isa = PBXBuildFile; fileRef = E233E032C92BE74AD79198DF /* App.swift */; };
+-		648A15BB50CB9A2FAD2CD0B5 /* AppTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5D17AB49F497EE585B895C8C /* AppTests.swift */; };
+-		75193A62030750CF268260E4 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E3AE5DA08A777C786045854A /* ContentView.swift */; };
++		489DCED82152DFE789147AF3 /* Task.swift in Sources */ = {isa = PBXBuildFile; fileRef = 251A36C6B7314429BAD6C72E /* Task.swift */; };
++		53BA11AEDAC795F7E75C7453 /* TaskListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 04C9EF06D1A0F6BAE27A490F /* TaskListView.swift */; };
++		C3DD913C19CC30090C9D40ED /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 0014F94A214C72DD3B618EBA /* Assets.xcassets */; };
++		C4E287025EBE6A702F065C73 /* SynapseTasksApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01F01DB79496BAAB8D7E7BC8 /* SynapseTasksApp.swift */; };
+ /* End PBXBuildFile section */
+ 
+-/* Begin PBXContainerItemProxy section */
+-		167AEB306F905A1831EA450A /* PBXContainerItemProxy */ = {
+-			isa = PBXContainerItemProxy;
+-			containerPortal = 14AD07D853E39BA7BF9D89AA /* Project object */;
+-			proxyType = 1;
+-			remoteGlobalIDString = B8EA8CEFBFB423AB8746E279;
+-			remoteInfo = SynapseTasks;
+-		};
+-/* End PBXContainerItemProxy section */
+-
+ /* Begin PBXFileReference section */
+-		5D17AB49F497EE585B895C8C /* AppTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppTests.swift; sourceTree = "<group>"; };
++		0014F94A214C72DD3B618EBA /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
++		01F01DB79496BAAB8D7E7BC8 /* SynapseTasksApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SynapseTasksApp.swift; sourceTree = "<group>"; };
++		04C9EF06D1A0F6BAE27A490F /* TaskListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskListView.swift; sourceTree = "<group>"; };
++		251A36C6B7314429BAD6C72E /* Task.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Task.swift; sourceTree = "<group>"; };
+ 		816C9AB020513A7656AC95B3 /* SynapseTasks.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = SynapseTasks.app; sourceTree = BUILT_PRODUCTS_DIR; };
+-		ADAA69E73358D87EB7F96015 /* SynapseTasksTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = SynapseTasksTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+-		E233E032C92BE74AD79198DF /* App.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = App.swift; sourceTree = "<group>"; };
+-		E3096E46A22FB310769EA831 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+-		E3AE5DA08A777C786045854A /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+ /* End PBXFileReference section */
+ 
+ /* Begin PBXGroup section */
+@@ -36,72 +26,62 @@
+ 			isa = PBXGroup;
+ 			children = (
+ 				816C9AB020513A7656AC95B3 /* SynapseTasks.app */,
+-				ADAA69E73358D87EB7F96015 /* SynapseTasksTests.xctest */,
+ 			);
+ 			name = Products;
+ 			sourceTree = "<group>";
+ 		};
+-		70603823757B04F662D22E77 = {
++		3DF3C50F1F78E3D4F9F78150 /* SynapseTasks */ = {
+ 			isa = PBXGroup;
+ 			children = (
+-				E84D61BD1360A72559F33A30 /* Sources */,
+-				1600B5C31D0AADDD9D8FF97E /* Products */,
++				0014F94A214C72DD3B618EBA /* Assets.xcassets */,
++			);
++			path = SynapseTasks;
++			sourceTree = "<group>";
++		};
++		491C442F7157FE0D411F3126 /* Models */ = {
++			isa = PBXGroup;
++			children = (
++				251A36C6B7314429BAD6C72E /* Task.swift */,
+ 			);
++			path = Models;
+ 			sourceTree = "<group>";
+ 		};
+-		BD292495C9F54793CE8963D6 /* App */ = {
++		5BBE81343374EAD832397720 /* SynapseTasks */ = {
+ 			isa = PBXGroup;
+ 			children = (
+-				E233E032C92BE74AD79198DF /* App.swift */,
+-				E3AE5DA08A777C786045854A /* ContentView.swift */,
+-				E3096E46A22FB310769EA831 /* Info.plist */,
++				01F01DB79496BAAB8D7E7BC8 /* SynapseTasksApp.swift */,
++				491C442F7157FE0D411F3126 /* Models */,
++				3DF3C50F1F78E3D4F9F78150 /* SynapseTasks */,
++				D44F51B79C6496B3708648D7 /* Views */,
+ 			);
+-			path = App;
++			path = SynapseTasks;
+ 			sourceTree = "<group>";
+ 		};
+-		E3BB4B783A6A78A12EF9F52E /* Tests */ = {
++		70603823757B04F662D22E77 = {
+ 			isa = PBXGroup;
+ 			children = (
+-				5D17AB49F497EE585B895C8C /* AppTests.swift */,
++				5BBE81343374EAD832397720 /* SynapseTasks */,
++				1600B5C31D0AADDD9D8FF97E /* Products */,
+ 			);
+-			path = Tests;
+ 			sourceTree = "<group>";
+ 		};
+-		E84D61BD1360A72559F33A30 /* Sources */ = {
++		D44F51B79C6496B3708648D7 /* Views */ = {
+ 			isa = PBXGroup;
+ 			children = (
+-				BD292495C9F54793CE8963D6 /* App */,
+-				E3BB4B783A6A78A12EF9F52E /* Tests */,
++				04C9EF06D1A0F6BAE27A490F /* TaskListView.swift */,
+ 			);
+-			path = Sources;
++			path = Views;
+ 			sourceTree = "<group>";
+ 		};
+ /* End PBXGroup section */
+ 
+ /* Begin PBXNativeTarget section */
+-		2FFA3CA4F9EBAA9E2AE9C55D /* SynapseTasksTests */ = {
+-			isa = PBXNativeTarget;
+-			buildConfigurationList = 114D8B0F33BC2A4B120A0E28 /* Build configuration list for PBXNativeTarget "SynapseTasksTests" */;
+-			buildPhases = (
+-				E981440BE8A7354208157D04 /* Sources */,
+-			);
+-			buildRules = (
+-			);
+-			dependencies = (
+-				8CD866DADC549779C46F61CF /* PBXTargetDependency */,
+-			);
+-			name = SynapseTasksTests;
+-			packageProductDependencies = (
+-			);
+-			productName = SynapseTasksTests;
+-			productReference = ADAA69E73358D87EB7F96015 /* SynapseTasksTests.xctest */;
+-			productType = "com.apple.product-type.bundle.unit-test";
+-		};
+ 		B8EA8CEFBFB423AB8746E279 /* SynapseTasks */ = {
+ 			isa = PBXNativeTarget;
+ 			buildConfigurationList = E08D2F99D4569262BD8CE24E /* Build configuration list for PBXNativeTarget "SynapseTasks" */;
+ 			buildPhases = (
+ 				0579BED5C53956F9031E14F0 /* Sources */,
++				143F5553470B4165B7AB5C73 /* Resources */,
+ 			);
+ 			buildRules = (
+ 			);
+@@ -138,39 +118,34 @@
+ 			projectRoot = "";
+ 			targets = (
+ 				B8EA8CEFBFB423AB8746E279 /* SynapseTasks */,
+-				2FFA3CA4F9EBAA9E2AE9C55D /* SynapseTasksTests */,
+ 			);
+ 		};
+ /* End PBXProject section */
+ 
+-/* Begin PBXSourcesBuildPhase section */
+-		0579BED5C53956F9031E14F0 /* Sources */ = {
+-			isa = PBXSourcesBuildPhase;
++/* Begin PBXResourcesBuildPhase section */
++		143F5553470B4165B7AB5C73 /* Resources */ = {
++			isa = PBXResourcesBuildPhase;
+ 			buildActionMask = 2147483647;
+ 			files = (
+-				3737B4B11EE76F44B23DBF31 /* App.swift in Sources */,
+-				75193A62030750CF268260E4 /* ContentView.swift in Sources */,
++				C3DD913C19CC30090C9D40ED /* Assets.xcassets in Resources */,
+ 			);
+ 			runOnlyForDeploymentPostprocessing = 0;
+ 		};
+-		E981440BE8A7354208157D04 /* Sources */ = {
++/* End PBXResourcesBuildPhase section */
++
++/* Begin PBXSourcesBuildPhase section */
++		0579BED5C53956F9031E14F0 /* Sources */ = {
+ 			isa = PBXSourcesBuildPhase;
+ 			buildActionMask = 2147483647;
+ 			files = (
+-				648A15BB50CB9A2FAD2CD0B5 /* AppTests.swift in Sources */,
++				C4E287025EBE6A702F065C73 /* SynapseTasksApp.swift in Sources */,
++				489DCED82152DFE789147AF3 /* Task.swift in Sources */,
++				53BA11AEDAC795F7E75C7453 /* TaskListView.swift in Sources */,
+ 			);
+ 			runOnlyForDeploymentPostprocessing = 0;
+ 		};
+ /* End PBXSourcesBuildPhase section */
+ 
+-/* Begin PBXTargetDependency section */
+-		8CD866DADC549779C46F61CF /* PBXTargetDependency */ = {
+-			isa = PBXTargetDependency;
+-			target = B8EA8CEFBFB423AB8746E279 /* SynapseTasks */;
+-			targetProxy = 167AEB306F905A1831EA450A /* PBXContainerItemProxy */;
+-		};
+-/* End PBXTargetDependency section */
+-
+ /* Begin XCBuildConfiguration section */
+ 		1E5E409A63F296D92DBA9234 /* Release */ = {
+ 			isa = XCBuildConfiguration;
+@@ -217,7 +192,7 @@
+ 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+ 				GCC_WARN_UNUSED_FUNCTION = YES;
+ 				GCC_WARN_UNUSED_VARIABLE = YES;
+-				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
++				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+ 				MTL_ENABLE_DEBUG_INFO = NO;
+ 				MTL_FAST_MATH = YES;
+ 				PRODUCT_NAME = "$(TARGET_NAME)";
+@@ -232,9 +207,10 @@
+ 			isa = XCBuildConfiguration;
+ 			buildSettings = {
+ 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+-				BASE_CONFIGURATION_REFERENCE = Configs/Base.xcconfig;
+ 				CODE_SIGN_IDENTITY = "iPhone Developer";
+-				INFOPLIST_FILE = Sources/App/Info.plist;
++				GENERATE_INFOPLIST_FILE = YES;
++				INFOPLIST_KEY_CFBundleDisplayName = "Synapse Tasks";
++				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+ 				LD_RUNPATH_SEARCH_PATHS = (
+ 					"$(inherited)",
+ 					"@executable_path/Frameworks",
+@@ -296,7 +272,7 @@
+ 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+ 				GCC_WARN_UNUSED_FUNCTION = YES;
+ 				GCC_WARN_UNUSED_VARIABLE = YES;
+-				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
++				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+ 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+ 				MTL_FAST_MATH = YES;
+ 				ONLY_ACTIVE_ARCH = YES;
+@@ -308,49 +284,14 @@
+ 			};
+ 			name = Debug;
+ 		};
+-		75987DE0222E1BB3DE6A9A5C /* Release */ = {
+-			isa = XCBuildConfiguration;
+-			buildSettings = {
+-				BUNDLE_LOADER = "$(TEST_HOST)";
+-				CODE_SIGNING_ALLOWED = NO;
+-				GENERATE_INFOPLIST_FILE = YES;
+-				LD_RUNPATH_SEARCH_PATHS = (
+-					"$(inherited)",
+-					"@executable_path/Frameworks",
+-					"@loader_path/Frameworks",
+-				);
+-				PRODUCT_BUNDLE_IDENTIFIER = com.kousuke.synapsetasks.tests;
+-				SDKROOT = iphoneos;
+-				TARGETED_DEVICE_FAMILY = "1,2";
+-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/SynapseTasks.app/SynapseTasks";
+-			};
+-			name = Release;
+-		};
+-		BE5D4AAEB8DE46052E96C7AF /* Debug */ = {
+-			isa = XCBuildConfiguration;
+-			buildSettings = {
+-				BUNDLE_LOADER = "$(TEST_HOST)";
+-				CODE_SIGNING_ALLOWED = NO;
+-				GENERATE_INFOPLIST_FILE = YES;
+-				LD_RUNPATH_SEARCH_PATHS = (
+-					"$(inherited)",
+-					"@executable_path/Frameworks",
+-					"@loader_path/Frameworks",
+-				);
+-				PRODUCT_BUNDLE_IDENTIFIER = com.kousuke.synapsetasks.tests;
+-				SDKROOT = iphoneos;
+-				TARGETED_DEVICE_FAMILY = "1,2";
+-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/SynapseTasks.app/SynapseTasks";
+-			};
+-			name = Debug;
+-		};
+ 		CBBC9EAFC008BFD50019A517 /* Release */ = {
+ 			isa = XCBuildConfiguration;
+ 			buildSettings = {
+ 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+-				BASE_CONFIGURATION_REFERENCE = Configs/Base.xcconfig;
+ 				CODE_SIGN_IDENTITY = "iPhone Developer";
+-				INFOPLIST_FILE = Sources/App/Info.plist;
++				GENERATE_INFOPLIST_FILE = YES;
++				INFOPLIST_KEY_CFBundleDisplayName = "Synapse Tasks";
++				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+ 				LD_RUNPATH_SEARCH_PATHS = (
+ 					"$(inherited)",
+ 					"@executable_path/Frameworks",
+@@ -364,15 +305,6 @@
+ /* End XCBuildConfiguration section */
+ 
+ /* Begin XCConfigurationList section */
+-		114D8B0F33BC2A4B120A0E28 /* Build configuration list for PBXNativeTarget "SynapseTasksTests" */ = {
+-			isa = XCConfigurationList;
+-			buildConfigurations = (
+-				BE5D4AAEB8DE46052E96C7AF /* Debug */,
+-				75987DE0222E1BB3DE6A9A5C /* Release */,
+-			);
+-			defaultConfigurationIsVisible = 0;
+-			defaultConfigurationName = Debug;
+-		};
+ 		13CB9BA62051666F071CB47D /* Build configuration list for PBXProject "SynapseTasks" */ = {
+ 			isa = XCConfigurationList;
+ 			buildConfigurations = (
+diff --git a/SynapseTasks.xcodeproj/xcshareddata/xcschemes/SynapseTasks.xcscheme b/SynapseTasks.xcodeproj/xcshareddata/xcschemes/SynapseTasks.xcscheme
+deleted file mode 100644
+index e244325..0000000
+--- a/SynapseTasks.xcodeproj/xcshareddata/xcschemes/SynapseTasks.xcscheme
++++ /dev/null
+@@ -1,104 +0,0 @@
+-<?xml version="1.0" encoding="UTF-8"?>
+-<Scheme
+-   LastUpgradeVersion = "1430"
+-   version = "1.7">
+-   <BuildAction
+-      parallelizeBuildables = "YES"
+-      buildImplicitDependencies = "YES"
+-      runPostActionsOnFailure = "NO">
+-      <BuildActionEntries>
+-         <BuildActionEntry
+-            buildForTesting = "YES"
+-            buildForRunning = "YES"
+-            buildForProfiling = "YES"
+-            buildForArchiving = "YES"
+-            buildForAnalyzing = "YES">
+-            <BuildableReference
+-               BuildableIdentifier = "primary"
+-               BlueprintIdentifier = "B8EA8CEFBFB423AB8746E279"
+-               BuildableName = "SynapseTasks.app"
+-               BlueprintName = "SynapseTasks"
+-               ReferencedContainer = "container:SynapseTasks.xcodeproj">
+-            </BuildableReference>
+-         </BuildActionEntry>
+-      </BuildActionEntries>
+-   </BuildAction>
+-   <TestAction
+-      buildConfiguration = "Debug"
+-      selectedDebuggerIdentifier = "Xcode.DebuggerFoundation.Debugger.LLDB"
+-      selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB"
+-      shouldUseLaunchSchemeArgsEnv = "YES"
+-      onlyGenerateCoverageForSpecifiedTargets = "NO">
+-      <MacroExpansion>
+-         <BuildableReference
+-            BuildableIdentifier = "primary"
+-            BlueprintIdentifier = "B8EA8CEFBFB423AB8746E279"
+-            BuildableName = "SynapseTasks.app"
+-            BlueprintName = "SynapseTasks"
+-            ReferencedContainer = "container:SynapseTasks.xcodeproj">
+-         </BuildableReference>
+-      </MacroExpansion>
+-      <Testables>
+-         <TestableReference
+-            skipped = "NO"
+-            parallelizable = "NO">
+-            <BuildableReference
+-               BuildableIdentifier = "primary"
+-               BlueprintIdentifier = "2FFA3CA4F9EBAA9E2AE9C55D"
+-               BuildableName = "SynapseTasksTests.xctest"
+-               BlueprintName = "SynapseTasksTests"
+-               ReferencedContainer = "container:SynapseTasks.xcodeproj">
+-            </BuildableReference>
+-         </TestableReference>
+-      </Testables>
+-      <CommandLineArguments>
+-      </CommandLineArguments>
+-   </TestAction>
+-   <LaunchAction
+-      buildConfiguration = "Debug"
+-      selectedDebuggerIdentifier = "Xcode.DebuggerFoundation.Debugger.LLDB"
+-      selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB"
+-      launchStyle = "0"
+-      useCustomWorkingDirectory = "NO"
+-      ignoresPersistentStateOnLaunch = "NO"
+-      debugDocumentVersioning = "YES"
+-      debugServiceExtension = "internal"
+-      allowLocationSimulation = "YES">
+-      <BuildableProductRunnable
+-         runnableDebuggingMode = "0">
+-         <BuildableReference
+-            BuildableIdentifier = "primary"
+-            BlueprintIdentifier = "B8EA8CEFBFB423AB8746E279"
+-            BuildableName = "SynapseTasks.app"
+-            BlueprintName = "SynapseTasks"
+-            ReferencedContainer = "container:SynapseTasks.xcodeproj">
+-         </BuildableReference>
+-      </BuildableProductRunnable>
+-      <CommandLineArguments>
+-      </CommandLineArguments>
+-   </LaunchAction>
+-   <ProfileAction
+-      buildConfiguration = "Release"
+-      shouldUseLaunchSchemeArgsEnv = "YES"
+-      savedToolIdentifier = ""
+-      useCustomWorkingDirectory = "NO"
+-      debugDocumentVersioning = "YES">
+-      <BuildableProductRunnable
+-         runnableDebuggingMode = "0">
+-         <BuildableReference
+-            BuildableIdentifier = "primary"
+-            BlueprintIdentifier = "B8EA8CEFBFB423AB8746E279"
+-            BuildableName = "SynapseTasks.app"
+-            BlueprintName = "SynapseTasks"
+-            ReferencedContainer = "container:SynapseTasks.xcodeproj">
+-         </BuildableReference>
+-      </BuildableProductRunnable>
+-   </ProfileAction>
+-   <AnalyzeAction
+-      buildConfiguration = "Debug">
+-   </AnalyzeAction>
+-   <ArchiveAction
+-      buildConfiguration = "Release"
+-      revealArchiveInOrganizer = "YES">
+-   </ArchiveAction>
+-</Scheme>
+diff --git a/SynapseTasks/SynapseTasks.xcodeproj/project.pbxproj b/SynapseTasks/SynapseTasks.xcodeproj/project.pbxproj
+deleted file mode 100644
+index c41389b..0000000
+--- a/SynapseTasks/SynapseTasks.xcodeproj/project.pbxproj
++++ /dev/null
+@@ -1,429 +0,0 @@
+-// !$*UTF8*$!
+-{
+-	archiveVersion = 1;
+-	classes = {
+-	};
+-	objectVersion = 77;
+-	objects = {
+-
+-/* Begin PBXBuildFile section */
+-		8ADCE1382E83E69200D82C18 /* GraphScene.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8ADCE12D2E83E69200D82C18 /* GraphScene.swift */; };
+-		8ADCE1392E83E69200D82C18 /* Persistence.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8ADCE12A2E83E69200D82C18 /* Persistence.swift */; };
+-		8ADCE13B2E83E69200D82C18 /* Seed.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8ADCE1342E83E69200D82C18 /* Seed.swift */; };
+-		8ADCE13C2E83E69200D82C18 /* SynapseTasksApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8ADCE12B2E83E69200D82C18 /* SynapseTasksApp.swift */; };
+-		8ADCE13D2E83E69200D82C18 /* TaskListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8ADCE12F2E83E69200D82C18 /* TaskListView.swift */; };
+-		8ADCE13E2E83E69200D82C18 /* DataModel.xcdatamodeld in Sources */ = {isa = PBXBuildFile; fileRef = 8ADCE1322E83E69200D82C18 /* DataModel.xcdatamodeld */; };
+-		8ADCE1402E83F67600D82C18 /* Domain.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8ADCE13F2E83F67600D82C18 /* Domain.swift */; };
+-/* End PBXBuildFile section */
+-
+-/* Begin PBXFileReference section */
+-		8ADCE1172E83E3BD00D82C18 /* SynapseTasks.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SynapseTasks.app; sourceTree = BUILT_PRODUCTS_DIR; };
+-		8ADCE12A2E83E69200D82C18 /* Persistence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Persistence.swift; sourceTree = "<group>"; };
+-		8ADCE12B2E83E69200D82C18 /* SynapseTasksApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SynapseTasksApp.swift; sourceTree = "<group>"; };
+-		8ADCE12D2E83E69200D82C18 /* GraphScene.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GraphScene.swift; sourceTree = "<group>"; };
+-		8ADCE12F2E83E69200D82C18 /* TaskListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskListView.swift; sourceTree = "<group>"; };
+-		8ADCE1342E83E69200D82C18 /* Seed.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Seed.swift; sourceTree = "<group>"; };
+-		8ADCE1372E83E69200D82C18 /* DataModel.xcdatamodel */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcdatamodel; path = DataModel.xcdatamodel; sourceTree = "<group>"; };
+-		8ADCE13F2E83F67600D82C18 /* Domain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Domain.swift; sourceTree = "<group>"; };
+-/* End PBXFileReference section */
+-
+-/* Begin PBXFileSystemSynchronizedRootGroup section */
+-		8ADCE1192E83E3BD00D82C18 /* SynapseTasks */ = {
+-			isa = PBXFileSystemSynchronizedRootGroup;
+-			path = SynapseTasks;
+-			sourceTree = "<group>";
+-		};
+-/* End PBXFileSystemSynchronizedRootGroup section */
+-
+-/* Begin PBXFrameworksBuildPhase section */
+-		8ADCE1142E83E3BD00D82C18 /* Frameworks */ = {
+-			isa = PBXFrameworksBuildPhase;
+-			buildActionMask = 2147483647;
+-			files = (
+-			);
+-			runOnlyForDeploymentPostprocessing = 0;
+-		};
+-/* End PBXFrameworksBuildPhase section */
+-
+-/* Begin PBXGroup section */
+-		8ADCE10E2E83E3BD00D82C18 = {
+-			isa = PBXGroup;
+-			children = (
+-				8ADCE12C2E83E69200D82C18 /* App */,
+-				8ADCE1312E83E69200D82C18 /* Features */,
+-				8ADCE1352E83E69200D82C18 /* Model */,
+-				8ADCE1362E83E69200D82C18 /* Shared */,
+-				8ADCE1192E83E3BD00D82C18 /* SynapseTasks */,
+-				8ADCE1182E83E3BD00D82C18 /* Products */,
+-			);
+-			sourceTree = "<group>";
+-		};
+-		8ADCE1182E83E3BD00D82C18 /* Products */ = {
+-			isa = PBXGroup;
+-			children = (
+-				8ADCE1172E83E3BD00D82C18 /* SynapseTasks.app */,
+-			);
+-			name = Products;
+-			sourceTree = "<group>";
+-		};
+-		8ADCE12C2E83E69200D82C18 /* App */ = {
+-			isa = PBXGroup;
+-			children = (
+-				8ADCE12A2E83E69200D82C18 /* Persistence.swift */,
+-				8ADCE12B2E83E69200D82C18 /* SynapseTasksApp.swift */,
+-			);
+-			name = App;
+-			path = ../App;
+-			sourceTree = SOURCE_ROOT;
+-		};
+-		8ADCE12E2E83E69200D82C18 /* Graph */ = {
+-			isa = PBXGroup;
+-			children = (
+-				8ADCE12D2E83E69200D82C18 /* GraphScene.swift */,
+-			);
+-			path = Graph;
+-			sourceTree = "<group>";
+-		};
+-		8ADCE1302E83E69200D82C18 /* ListUI */ = {
+-			isa = PBXGroup;
+-			children = (
+-				8ADCE12F2E83E69200D82C18 /* TaskListView.swift */,
+-			);
+-			path = ListUI;
+-			sourceTree = "<group>";
+-		};
+-		8ADCE1312E83E69200D82C18 /* Features */ = {
+-			isa = PBXGroup;
+-			children = (
+-				8ADCE12E2E83E69200D82C18 /* Graph */,
+-				8ADCE1302E83E69200D82C18 /* ListUI */,
+-			);
+-			name = Features;
+-			path = ../Features;
+-			sourceTree = SOURCE_ROOT;
+-		};
+-		8ADCE1352E83E69200D82C18 /* Model */ = {
+-			isa = PBXGroup;
+-			children = (
+-				8ADCE1322E83E69200D82C18 /* DataModel.xcdatamodeld */,
+-				8ADCE1342E83E69200D82C18 /* Seed.swift */,
+-				8ADCE13F2E83F67600D82C18 /* Domain.swift */,
+-			);
+-			name = Model;
+-			path = ../Model;
+-			sourceTree = SOURCE_ROOT;
+-		};
+-		8ADCE1362E83E69200D82C18 /* Shared */ = {
+-			isa = PBXGroup;
+-			children = (
+-			);
+-			name = Shared;
+-			path = ../Shared;
+-			sourceTree = SOURCE_ROOT;
+-		};
+-/* End PBXGroup section */
+-
+-/* Begin PBXNativeTarget section */
+-		8ADCE1162E83E3BD00D82C18 /* SynapseTasks */ = {
+-			isa = PBXNativeTarget;
+-			buildConfigurationList = 8ADCE1272E83E3BE00D82C18 /* Build configuration list for PBXNativeTarget "SynapseTasks" */;
+-			buildPhases = (
+-				8ADCE1132E83E3BD00D82C18 /* Sources */,
+-				8ADCE1142E83E3BD00D82C18 /* Frameworks */,
+-				8ADCE1152E83E3BD00D82C18 /* Resources */,
+-			);
+-			buildRules = (
+-			);
+-			dependencies = (
+-			);
+-			fileSystemSynchronizedGroups = (
+-				8ADCE1192E83E3BD00D82C18 /* SynapseTasks */,
+-			);
+-			name = SynapseTasks;
+-			packageProductDependencies = (
+-			);
+-			productName = SynapseTasks;
+-			productReference = 8ADCE1172E83E3BD00D82C18 /* SynapseTasks.app */;
+-			productType = "com.apple.product-type.application";
+-		};
+-/* End PBXNativeTarget section */
+-
+-/* Begin PBXProject section */
+-		8ADCE10F2E83E3BD00D82C18 /* Project object */ = {
+-			isa = PBXProject;
+-			attributes = {
+-				BuildIndependentTargetsInParallel = 1;
+-				LastSwiftUpdateCheck = 2600;
+-				LastUpgradeCheck = 2600;
+-				TargetAttributes = {
+-					8ADCE1162E83E3BD00D82C18 = {
+-						CreatedOnToolsVersion = 26.0.1;
+-					};
+-				};
+-			};
+-			buildConfigurationList = 8ADCE1122E83E3BD00D82C18 /* Build configuration list for PBXProject "SynapseTasks" */;
+-			developmentRegion = en;
+-			hasScannedForEncodings = 0;
+-			knownRegions = (
+-				en,
+-				Base,
+-			);
+-			mainGroup = 8ADCE10E2E83E3BD00D82C18;
+-			minimizedProjectReferenceProxies = 1;
+-			preferredProjectObjectVersion = 77;
+-			productRefGroup = 8ADCE1182E83E3BD00D82C18 /* Products */;
+-			projectDirPath = "";
+-			projectRoot = "";
+-			targets = (
+-				8ADCE1162E83E3BD00D82C18 /* SynapseTasks */,
+-			);
+-		};
+-/* End PBXProject section */
+-
+-/* Begin PBXResourcesBuildPhase section */
+-		8ADCE1152E83E3BD00D82C18 /* Resources */ = {
+-			isa = PBXResourcesBuildPhase;
+-			buildActionMask = 2147483647;
+-			files = (
+-			);
+-			runOnlyForDeploymentPostprocessing = 0;
+-		};
+-/* End PBXResourcesBuildPhase section */
+-
+-/* Begin PBXSourcesBuildPhase section */
+-		8ADCE1132E83E3BD00D82C18 /* Sources */ = {
+-			isa = PBXSourcesBuildPhase;
+-			buildActionMask = 2147483647;
+-			files = (
+-				8ADCE1382E83E69200D82C18 /* GraphScene.swift in Sources */,
+-				8ADCE1392E83E69200D82C18 /* Persistence.swift in Sources */,
+-				8ADCE13B2E83E69200D82C18 /* Seed.swift in Sources */,
+-				8ADCE13C2E83E69200D82C18 /* SynapseTasksApp.swift in Sources */,
+-				8ADCE13D2E83E69200D82C18 /* TaskListView.swift in Sources */,
+-				8ADCE13E2E83E69200D82C18 /* DataModel.xcdatamodeld in Sources */,
+-				8ADCE1402E83F67600D82C18 /* Domain.swift in Sources */,
+-			);
+-			runOnlyForDeploymentPostprocessing = 0;
+-		};
+-/* End PBXSourcesBuildPhase section */
+-
+-/* Begin XCBuildConfiguration section */
+-		8ADCE1252E83E3BE00D82C18 /* Debug */ = {
+-			isa = XCBuildConfiguration;
+-			buildSettings = {
+-				ALWAYS_SEARCH_USER_PATHS = NO;
+-				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+-				CLANG_ANALYZER_NONNULL = YES;
+-				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+-				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+-				CLANG_ENABLE_MODULES = YES;
+-				CLANG_ENABLE_OBJC_ARC = YES;
+-				CLANG_ENABLE_OBJC_WEAK = YES;
+-				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+-				CLANG_WARN_BOOL_CONVERSION = YES;
+-				CLANG_WARN_COMMA = YES;
+-				CLANG_WARN_CONSTANT_CONVERSION = YES;
+-				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+-				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+-				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+-				CLANG_WARN_EMPTY_BODY = YES;
+-				CLANG_WARN_ENUM_CONVERSION = YES;
+-				CLANG_WARN_INFINITE_RECURSION = YES;
+-				CLANG_WARN_INT_CONVERSION = YES;
+-				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+-				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+-				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+-				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+-				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+-				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+-				CLANG_WARN_STRICT_PROTOTYPES = YES;
+-				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+-				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+-				CLANG_WARN_UNREACHABLE_CODE = YES;
+-				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+-				COPY_PHASE_STRIP = NO;
+-				DEBUG_INFORMATION_FORMAT = dwarf;
+-				ENABLE_STRICT_OBJC_MSGSEND = YES;
+-				ENABLE_TESTABILITY = YES;
+-				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+-				GCC_C_LANGUAGE_STANDARD = gnu17;
+-				GCC_DYNAMIC_NO_PIC = NO;
+-				GCC_NO_COMMON_BLOCKS = YES;
+-				GCC_OPTIMIZATION_LEVEL = 0;
+-				GCC_PREPROCESSOR_DEFINITIONS = (
+-					"DEBUG=1",
+-					"$(inherited)",
+-				);
+-				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+-				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+-				GCC_WARN_UNDECLARED_SELECTOR = YES;
+-				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+-				GCC_WARN_UNUSED_FUNCTION = YES;
+-				GCC_WARN_UNUSED_VARIABLE = YES;
+-				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+-				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+-				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+-				MTL_FAST_MATH = YES;
+-				ONLY_ACTIVE_ARCH = YES;
+-				SDKROOT = iphoneos;
+-				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+-				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+-			};
+-			name = Debug;
+-		};
+-		8ADCE1262E83E3BE00D82C18 /* Release */ = {
+-			isa = XCBuildConfiguration;
+-			buildSettings = {
+-				ALWAYS_SEARCH_USER_PATHS = NO;
+-				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+-				CLANG_ANALYZER_NONNULL = YES;
+-				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+-				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+-				CLANG_ENABLE_MODULES = YES;
+-				CLANG_ENABLE_OBJC_ARC = YES;
+-				CLANG_ENABLE_OBJC_WEAK = YES;
+-				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+-				CLANG_WARN_BOOL_CONVERSION = YES;
+-				CLANG_WARN_COMMA = YES;
+-				CLANG_WARN_CONSTANT_CONVERSION = YES;
+-				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+-				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+-				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+-				CLANG_WARN_EMPTY_BODY = YES;
+-				CLANG_WARN_ENUM_CONVERSION = YES;
+-				CLANG_WARN_INFINITE_RECURSION = YES;
+-				CLANG_WARN_INT_CONVERSION = YES;
+-				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+-				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+-				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+-				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+-				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+-				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+-				CLANG_WARN_STRICT_PROTOTYPES = YES;
+-				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+-				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+-				CLANG_WARN_UNREACHABLE_CODE = YES;
+-				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+-				COPY_PHASE_STRIP = NO;
+-				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+-				ENABLE_NS_ASSERTIONS = NO;
+-				ENABLE_STRICT_OBJC_MSGSEND = YES;
+-				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+-				GCC_C_LANGUAGE_STANDARD = gnu17;
+-				GCC_NO_COMMON_BLOCKS = YES;
+-				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+-				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+-				GCC_WARN_UNDECLARED_SELECTOR = YES;
+-				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+-				GCC_WARN_UNUSED_FUNCTION = YES;
+-				GCC_WARN_UNUSED_VARIABLE = YES;
+-				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+-				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+-				MTL_ENABLE_DEBUG_INFO = NO;
+-				MTL_FAST_MATH = YES;
+-				SDKROOT = iphoneos;
+-				SWIFT_COMPILATION_MODE = wholemodule;
+-				VALIDATE_PRODUCT = YES;
+-			};
+-			name = Release;
+-		};
+-		8ADCE1282E83E3BE00D82C18 /* Debug */ = {
+-			isa = XCBuildConfiguration;
+-			buildSettings = {
+-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+-				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+-				CODE_SIGN_STYLE = Automatic;
+-				CURRENT_PROJECT_VERSION = 1;
+-				ENABLE_PREVIEWS = YES;
+-				GENERATE_INFOPLIST_FILE = YES;
+-				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+-				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+-				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+-				LD_RUNPATH_SEARCH_PATHS = (
+-					"$(inherited)",
+-					"@executable_path/Frameworks",
+-				);
+-				MARKETING_VERSION = 1.0;
+-				PRODUCT_BUNDLE_IDENTIFIER = com.kousuke.SynapseTasks;
+-				PRODUCT_NAME = "$(TARGET_NAME)";
+-				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+-				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+-				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+-				SWIFT_EMIT_LOC_STRINGS = YES;
+-				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+-				SWIFT_VERSION = 5.0;
+-				TARGETED_DEVICE_FAMILY = "1,2";
+-			};
+-			name = Debug;
+-		};
+-		8ADCE1292E83E3BE00D82C18 /* Release */ = {
+-			isa = XCBuildConfiguration;
+-			buildSettings = {
+-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+-				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+-				CODE_SIGN_STYLE = Automatic;
+-				CURRENT_PROJECT_VERSION = 1;
+-				ENABLE_PREVIEWS = YES;
+-				GENERATE_INFOPLIST_FILE = YES;
+-				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+-				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+-				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+-				LD_RUNPATH_SEARCH_PATHS = (
+-					"$(inherited)",
+-					"@executable_path/Frameworks",
+-				);
+-				MARKETING_VERSION = 1.0;
+-				PRODUCT_BUNDLE_IDENTIFIER = com.kousuke.SynapseTasks;
+-				PRODUCT_NAME = "$(TARGET_NAME)";
+-				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+-				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+-				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+-				SWIFT_EMIT_LOC_STRINGS = YES;
+-				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+-				SWIFT_VERSION = 5.0;
+-				TARGETED_DEVICE_FAMILY = "1,2";
+-			};
+-			name = Release;
+-		};
+-/* End XCBuildConfiguration section */
+-
+-/* Begin XCConfigurationList section */
+-		8ADCE1122E83E3BD00D82C18 /* Build configuration list for PBXProject "SynapseTasks" */ = {
+-			isa = XCConfigurationList;
+-			buildConfigurations = (
+-				8ADCE1252E83E3BE00D82C18 /* Debug */,
+-				8ADCE1262E83E3BE00D82C18 /* Release */,
+-			);
+-			defaultConfigurationIsVisible = 0;
+-			defaultConfigurationName = Release;
+-		};
+-		8ADCE1272E83E3BE00D82C18 /* Build configuration list for PBXNativeTarget "SynapseTasks" */ = {
+-			isa = XCConfigurationList;
+-			buildConfigurations = (
+-				8ADCE1282E83E3BE00D82C18 /* Debug */,
+-				8ADCE1292E83E3BE00D82C18 /* Release */,
+-			);
+-			defaultConfigurationIsVisible = 0;
+-			defaultConfigurationName = Release;
+-		};
+-/* End XCConfigurationList section */
+-
+-/* Begin XCVersionGroup section */
+-		8ADCE1322E83E69200D82C18 /* DataModel.xcdatamodeld */ = {
+-			isa = XCVersionGroup;
+-			children = (
+-				8ADCE1372E83E69200D82C18 /* DataModel.xcdatamodel */,
+-			);
+-			currentVersion = 8ADCE1372E83E69200D82C18 /* DataModel.xcdatamodel */;
+-			path = DataModel.xcdatamodeld;
+-			sourceTree = "<group>";
+-			versionGroupType = wrapper.xcdatamodel;
+-		};
+-/* End XCVersionGroup section */
+-	};
+-	rootObject = 8ADCE10F2E83E3BD00D82C18 /* Project object */;
+-}
+diff --git a/SynapseTasks/SynapseTasks.xcodeproj/project.xcworkspace/contents.xcworkspacedata b/SynapseTasks/SynapseTasks.xcodeproj/project.xcworkspace/contents.xcworkspacedata
+deleted file mode 100644
+index 919434a..0000000
+--- a/SynapseTasks/SynapseTasks.xcodeproj/project.xcworkspace/contents.xcworkspacedata
++++ /dev/null
+@@ -1,7 +0,0 @@
+-<?xml version="1.0" encoding="UTF-8"?>
+-<Workspace
+-   version = "1.0">
+-   <FileRef
+-      location = "self:">
+-   </FileRef>
+-</Workspace>
+diff --git a/project.yml b/project.yml
+index 546bf61..4bbf6b7 100644
+--- a/project.yml
++++ b/project.yml
+@@ -1,31 +1,20 @@
+ name: SynapseTasks
+ options:
+-  deploymentTarget: { iOS: "17.0" }
+-  createIntermediateGroups: true
++  bundleIdPrefix: com.kousuke
++  deploymentTarget:
++    iOS: "16.0"
++
+ targets:
+   SynapseTasks:
+     type: application
+     platform: iOS
+-    sources: [Sources/App]
++    sources:
++      - path: SynapseTasks
+     settings:
+       base:
+-        INFOPLIST_FILE: Sources/App/Info.plist
+         PRODUCT_BUNDLE_IDENTIFIER: com.kousuke.synapsetasks
+-        BASE_CONFIGURATION_REFERENCE: Configs/Base.xcconfig
+-
+-  SynapseTasksTests:
+-    type: bundle.unit-test
+-    platform: iOS
+-    sources: [Sources/Tests]
+-    dependencies: [{ target: SynapseTasks }]
+-    settings:
+-      base:
+         GENERATE_INFOPLIST_FILE: YES
+-        PRODUCT_BUNDLE_IDENTIFIER: com.kousuke.synapsetasks.tests
+-        CODE_SIGNING_ALLOWED: NO
++        # 生成される Info.plist に追加したいキー（任意）
++        INFOPLIST_KEY_CFBundleDisplayName: Synapse Tasks
++        INFOPLIST_KEY_UILaunchScreen_Generation: YES   # まっさらの起動画面を自動生成
+ 
+-schemes:
+-  SynapseTasks:
+-    build: { targets: { SynapseTasks: all } }
+-    test:  { targets: [SynapseTasksTests] }
+-    run:   { config: Debug }
+diff --git a/tools/run.sh b/tools/run.sh
+index a7f22a2..3e78f14 100755
+--- a/tools/run.sh
++++ b/tools/run.sh
+@@ -1,11 +1,45 @@
+ #!/usr/bin/env bash
+ set -euo pipefail
+-DEV=9B6C7E23-EB17-4B7E-95B1-FBEC6EFAB03C
+-xcrun simctl boot "$DEV" || true
+-xcrun simctl bootstatus "$DEV" -b
+-xcodebuild -scheme SynapseTasks -destination "platform=iOS Simulator,OS=latest,id=$DEV" -configuration Debug -derivedDataPath build build
+-APP=build/Build/Products/Debug-iphonesimulator/SynapseTasks.app
+-BID=$(/usr/libexec/PlistBuddy -c 'Print CFBundleIdentifier' "$APP/Info.plist")
+-xcrun simctl uninstall "$DEV" "$BID" || true
+-xcrun simctl install "$DEV" "$APP"
+-xcrun simctl launch "$DEV" "$BID"
++
++SCHEME="SynapseTasks"
++BUNDLE_ID="com.kousuke.synapsetasks"
++DEST_NAME="${DEST_NAME:-iPhone 15}"   # 環境変数で上書き可
++CONFIG="Debug"
++
++echo "==> Ensure Simulator is running: ${DEST_NAME}"
++open -a Simulator >/dev/null 2>&1 || true
++# 端末取得（なければ作成）
++DEVICE_ID=$(xcrun simctl list devices | awk -v n="$DEST_NAME" -F '[()]' '$0 ~ n && $0 ~ "Booted" {print $2; exit}')
++if [ -z "${DEVICE_ID:-}" ]; then
++  DEVICE_ID=$(xcrun simctl list devices | awk -v n="$DEST_NAME" -F '[()]' '$0 ~ n {print $2; exit}')
++  if [ -z "${DEVICE_ID:-}" ]; then
++    # iOS 18系の最新ランタイムで作る（必要なら名称調整）
++    RUNTIME=$(xcrun simctl list runtimes | awk -F '[()]' '/iOS 18/ {print $2; exit}')
++    xcrun simctl create "$DEST_NAME" "com.apple.CoreSimulator.SimDeviceType.iPhone-15" "$RUNTIME"
++    DEVICE_ID=$(xcrun simctl list devices | awk -F '[()]' '$0 ~ "iPhone 15" {print $2; exit}')
++  fi
++fi
++xcrun simctl boot "$DEVICE_ID" 2>/dev/null || true
++
++echo "==> Build"
++xcodebuild \
++  -scheme "$SCHEME" \
++  -configuration "$CONFIG" \
++  -destination "platform=iOS Simulator,id=$DEVICE_ID" \
++  -derivedDataPath build \
++  build | xcbeautify
++
++APP="build/Build/Products/${CONFIG}-iphonesimulator/${SCHEME}.app"
++
++echo "==> Install"
++xcrun simctl uninstall "$DEVICE_ID" "$BUNDLE_ID" || true
++xcrun simctl install "$DEVICE_ID" "$APP"
++
++echo "==> Launch"
++xcrun simctl launch "$DEVICE_ID" "$BUNDLE_ID" || {
++  echo "Launch failed. Tail logs:"
++  xcrun simctl spawn "$DEVICE_ID" log stream --level debug --style compact --predicate 'process == "'"$SCHEME"'"' | head -n 200
++  exit 1
++}
++
++echo "✅ Done"

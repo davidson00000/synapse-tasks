@@ -1,0 +1,20 @@
+name: SynapseTasks
+options:
+  bundleIdPrefix: com.kousuke
+  deploymentTarget:
+    iOS: "16.0"
+
+targets:
+  SynapseTasks:
+    type: application
+    platform: iOS
+    sources:
+      - path: SynapseTasks
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.kousuke.synapsetasks
+        GENERATE_INFOPLIST_FILE: YES
+        # 生成される Info.plist に追加したいキー（任意）
+        INFOPLIST_KEY_CFBundleDisplayName: Synapse Tasks
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES   # まっさらの起動画面を自動生成
+
