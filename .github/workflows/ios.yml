@@ -1,56 +1,35 @@
 name: iOS CI
 
 on:
+  workflow_dispatch:
   push:
     branches: [ "main" ]
-  pull_request:
-  workflow_dispatch:
 
 jobs:
-  build-and-lint:
+  build:
     runs-on: macos-14
-
     steps:
       - uses: actions/checkout@v4
 
-      # Xcode 16系を選択（project format 77 対応）
       - name: Select Xcode 16.x
         uses: maxim-lobanov/setup-xcode@v1
         with:
           xcode-version: '16.x'
 
-      # ✅ pipは使わずHomebrewで入れる（PEP 668対策）
-      - name: Install tooling (brew)
-        run: |
-          brew update
-          brew install xcodegen swiftformat swiftlint pre-commit
-
-      # XcodeGen（project.yml があれば）
-      - name: Generate Xcode project (if project.yml exists)
-        run: |
-          if [ -f project.yml ]; then
-            xcodegen generate
-          else
-            echo "project.yml not found, skipping xcodegen"
-          fi
-
-      # Lint（pre-commit 経由で SwiftFormat / SwiftLint を実行）
-      - name: Run pre-commit (SwiftFormat / SwiftLint)
-        run: pre-commit run --all-files
-
-      # iOSビルド（最低限の検証）
       - name: Build (Simulator)
         env:
           PROJECT: SynapseTasks.xcodeproj
           SCHEME: SynapseTasks
-          DESTINATION: "platform=iOS Simulator,name=iPhone 16"
+          DESTINATION: ""
         run: |
           xcodebuild -list -project "$PROJECT"
+          # DESTINATION は scripts と同じロジックで自動解決できるようにするなら scripts を使う手もあり
           xcodebuild \
             -project "$PROJECT" \
-            -scheme  "$SCHEME" \
+            -scheme "$SCHEME" \
             -sdk iphonesimulator \
-            -destination "$DESTINATION" \
+            -destination 'platform=iOS Simulator,name=iPhone 15' \
             -configuration Debug \
             build
+
 

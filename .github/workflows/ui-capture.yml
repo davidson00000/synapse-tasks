@@ -1,9 +1,9 @@
 name: UI Capture
 
 on:
+  workflow_dispatch:
   push:
     branches: [ "main" ]
-  workflow_dispatch:
 
 jobs:
   ui-capture:
@@ -12,34 +12,31 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Xcode 16系を選択（16.2 などに自動追随）
       - name: Select Xcode 16.x
         uses: maxim-lobanov/setup-xcode@v1
         with:
           xcode-version: '16.x'
 
-      # 診断（Xcode/SDK/デバイス/スキームの確認）
-      - name: Preflight (verify repo state)
+      - name: Preflight (verify environment)
         run: |
           set -x
           xcodebuild -version
           xcodebuild -showsdks
           xcrun simctl list devices
-          xcodebuild -list -project SynapseTasks.xcodeproj
+          xcodebuild -list -project SynapseTasks.xcodeproj || true
           git rev-parse --short HEAD
-          head -n 40 scripts/ui_capture.sh || true
+          head -n 60 scripts/ui_capture.sh || true
 
-      # ビルド & キャプチャ（スクリプトでまとめて実行）
       - name: Build & Capture Screens
         env:
           PROJECT: SynapseTasks.xcodeproj
           SCHEME: SynapseTasks
-          DESTINATION: "platform=iOS Simulator,name=iPhone 16"
+          # 具体名が無い時でも動くよう、スクリプト内で動的解決する
+          DESTINATION: ""
         run: |
           chmod +x scripts/ui_capture.sh
           ./scripts/ui_capture.sh
 
-      # 任意: スクショがあれば成果物として保存
       - name: Upload screenshots
         if: always()
         uses: actions/upload-artifact@v4
