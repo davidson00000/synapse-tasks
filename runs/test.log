@@ -1,0 +1,6 @@
+Command line invocation:
+    /Applications/Xcode.app/Contents/Developer/usr/bin/xcodebuild -scheme SynapseTasks -configuration Debug -sdk iphonesimulator -destination id=BF5EBFFD-FB68-42C7-B26F-F2A0E9F6ECB0 test
+
+Build settings from command line:
+    SDKROOT = iphonesimulator26.0
+

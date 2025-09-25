@@ -7,28 +7,18 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		3737B4B11EE76F44B23DBF31 /* App.swift in Sources */ = {isa = PBXBuildFile; fileRef = E233E032C92BE74AD79198DF /* App.swift */; };
-		648A15BB50CB9A2FAD2CD0B5 /* AppTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5D17AB49F497EE585B895C8C /* AppTests.swift */; };
-		75193A62030750CF268260E4 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E3AE5DA08A777C786045854A /* ContentView.swift */; };
+		489DCED82152DFE789147AF3 /* Task.swift in Sources */ = {isa = PBXBuildFile; fileRef = 251A36C6B7314429BAD6C72E /* Task.swift */; };
+		53BA11AEDAC795F7E75C7453 /* TaskListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 04C9EF06D1A0F6BAE27A490F /* TaskListView.swift */; };
+		C3DD913C19CC30090C9D40ED /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 0014F94A214C72DD3B618EBA /* Assets.xcassets */; };
+		C4E287025EBE6A702F065C73 /* SynapseTasksApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01F01DB79496BAAB8D7E7BC8 /* SynapseTasksApp.swift */; };
 /* End PBXBuildFile section */
 
-/* Begin PBXContainerItemProxy section */
-		167AEB306F905A1831EA450A /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = 14AD07D853E39BA7BF9D89AA /* Project object */;
-			proxyType = 1;
-			remoteGlobalIDString = B8EA8CEFBFB423AB8746E279;
-			remoteInfo = SynapseTasks;
-		};
-/* End PBXContainerItemProxy section */
-
 /* Begin PBXFileReference section */
-		5D17AB49F497EE585B895C8C /* AppTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppTests.swift; sourceTree = "<group>"; };
+		0014F94A214C72DD3B618EBA /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		01F01DB79496BAAB8D7E7BC8 /* SynapseTasksApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SynapseTasksApp.swift; sourceTree = "<group>"; };
+		04C9EF06D1A0F6BAE27A490F /* TaskListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskListView.swift; sourceTree = "<group>"; };
+		251A36C6B7314429BAD6C72E /* Task.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Task.swift; sourceTree = "<group>"; };
 		816C9AB020513A7656AC95B3 /* SynapseTasks.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = SynapseTasks.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		ADAA69E73358D87EB7F96015 /* SynapseTasksTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = SynapseTasksTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		E233E032C92BE74AD79198DF /* App.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = App.swift; sourceTree = "<group>"; };
-		E3096E46A22FB310769EA831 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
-		E3AE5DA08A777C786045854A /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -36,72 +26,62 @@
 			isa = PBXGroup;
 			children = (
 				816C9AB020513A7656AC95B3 /* SynapseTasks.app */,
-				ADAA69E73358D87EB7F96015 /* SynapseTasksTests.xctest */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		3DF3C50F1F78E3D4F9F78150 /* SynapseTasks */ = {
+			isa = PBXGroup;
+			children = (
+				0014F94A214C72DD3B618EBA /* Assets.xcassets */,
+			);
+			path = SynapseTasks;
+			sourceTree = "<group>";
+		};
+		491C442F7157FE0D411F3126 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				251A36C6B7314429BAD6C72E /* Task.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		5BBE81343374EAD832397720 /* SynapseTasks */ = {
+			isa = PBXGroup;
+			children = (
+				01F01DB79496BAAB8D7E7BC8 /* SynapseTasksApp.swift */,
+				491C442F7157FE0D411F3126 /* Models */,
+				3DF3C50F1F78E3D4F9F78150 /* SynapseTasks */,
+				D44F51B79C6496B3708648D7 /* Views */,
+			);
+			path = SynapseTasks;
 			sourceTree = "<group>";
 		};
 		70603823757B04F662D22E77 = {
 			isa = PBXGroup;
 			children = (
-				E84D61BD1360A72559F33A30 /* Sources */,
+				5BBE81343374EAD832397720 /* SynapseTasks */,
 				1600B5C31D0AADDD9D8FF97E /* Products */,
 			);
 			sourceTree = "<group>";
 		};
-		BD292495C9F54793CE8963D6 /* App */ = {
+		D44F51B79C6496B3708648D7 /* Views */ = {
 			isa = PBXGroup;
 			children = (
-				E233E032C92BE74AD79198DF /* App.swift */,
-				E3AE5DA08A777C786045854A /* ContentView.swift */,
-				E3096E46A22FB310769EA831 /* Info.plist */,
+				04C9EF06D1A0F6BAE27A490F /* TaskListView.swift */,
 			);
-			path = App;
-			sourceTree = "<group>";
-		};
-		E3BB4B783A6A78A12EF9F52E /* Tests */ = {
-			isa = PBXGroup;
-			children = (
-				5D17AB49F497EE585B895C8C /* AppTests.swift */,
-			);
-			path = Tests;
-			sourceTree = "<group>";
-		};
-		E84D61BD1360A72559F33A30 /* Sources */ = {
-			isa = PBXGroup;
-			children = (
-				BD292495C9F54793CE8963D6 /* App */,
-				E3BB4B783A6A78A12EF9F52E /* Tests */,
-			);
-			path = Sources;
+			path = Views;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		2FFA3CA4F9EBAA9E2AE9C55D /* SynapseTasksTests */ = {
-			isa = PBXNativeTarget;
-			buildConfigurationList = 114D8B0F33BC2A4B120A0E28 /* Build configuration list for PBXNativeTarget "SynapseTasksTests" */;
-			buildPhases = (
-				E981440BE8A7354208157D04 /* Sources */,
-			);
-			buildRules = (
-			);
-			dependencies = (
-				8CD866DADC549779C46F61CF /* PBXTargetDependency */,
-			);
-			name = SynapseTasksTests;
-			packageProductDependencies = (
-			);
-			productName = SynapseTasksTests;
-			productReference = ADAA69E73358D87EB7F96015 /* SynapseTasksTests.xctest */;
-			productType = "com.apple.product-type.bundle.unit-test";
-		};
 		B8EA8CEFBFB423AB8746E279 /* SynapseTasks */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = E08D2F99D4569262BD8CE24E /* Build configuration list for PBXNativeTarget "SynapseTasks" */;
 			buildPhases = (
 				0579BED5C53956F9031E14F0 /* Sources */,
+				143F5553470B4165B7AB5C73 /* Resources */,
 			);
 			buildRules = (
 			);
@@ -138,38 +118,33 @@
 			projectRoot = "";
 			targets = (
 				B8EA8CEFBFB423AB8746E279 /* SynapseTasks */,
-				2FFA3CA4F9EBAA9E2AE9C55D /* SynapseTasksTests */,
 			);
 		};
 /* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		143F5553470B4165B7AB5C73 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				C3DD913C19CC30090C9D40ED /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		0579BED5C53956F9031E14F0 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				3737B4B11EE76F44B23DBF31 /* App.swift in Sources */,
-				75193A62030750CF268260E4 /* ContentView.swift in Sources */,
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		E981440BE8A7354208157D04 /* Sources */ = {
-			isa = PBXSourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-				648A15BB50CB9A2FAD2CD0B5 /* AppTests.swift in Sources */,
+				C4E287025EBE6A702F065C73 /* SynapseTasksApp.swift in Sources */,
+				489DCED82152DFE789147AF3 /* Task.swift in Sources */,
+				53BA11AEDAC795F7E75C7453 /* TaskListView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
-
-/* Begin PBXTargetDependency section */
-		8CD866DADC549779C46F61CF /* PBXTargetDependency */ = {
-			isa = PBXTargetDependency;
-			target = B8EA8CEFBFB423AB8746E279 /* SynapseTasks */;
-			targetProxy = 167AEB306F905A1831EA450A /* PBXContainerItemProxy */;
-		};
-/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		1E5E409A63F296D92DBA9234 /* Release */ = {
@@ -217,7 +192,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -232,9 +207,10 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				BASE_CONFIGURATION_REFERENCE = Configs/Base.xcconfig;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				INFOPLIST_FILE = Sources/App/Info.plist;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "Synapse Tasks";
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -296,7 +272,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
@@ -308,49 +284,14 @@
 			};
 			name = Debug;
 		};
-		75987DE0222E1BB3DE6A9A5C /* Release */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				BUNDLE_LOADER = "$(TEST_HOST)";
-				CODE_SIGNING_ALLOWED = NO;
-				GENERATE_INFOPLIST_FILE = YES;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/Frameworks",
-					"@loader_path/Frameworks",
-				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.kousuke.synapsetasks.tests;
-				SDKROOT = iphoneos;
-				TARGETED_DEVICE_FAMILY = "1,2";
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/SynapseTasks.app/SynapseTasks";
-			};
-			name = Release;
-		};
-		BE5D4AAEB8DE46052E96C7AF /* Debug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				BUNDLE_LOADER = "$(TEST_HOST)";
-				CODE_SIGNING_ALLOWED = NO;
-				GENERATE_INFOPLIST_FILE = YES;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/Frameworks",
-					"@loader_path/Frameworks",
-				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.kousuke.synapsetasks.tests;
-				SDKROOT = iphoneos;
-				TARGETED_DEVICE_FAMILY = "1,2";
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/SynapseTasks.app/SynapseTasks";
-			};
-			name = Debug;
-		};
 		CBBC9EAFC008BFD50019A517 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				BASE_CONFIGURATION_REFERENCE = Configs/Base.xcconfig;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				INFOPLIST_FILE = Sources/App/Info.plist;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "Synapse Tasks";
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -364,15 +305,6 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		114D8B0F33BC2A4B120A0E28 /* Build configuration list for PBXNativeTarget "SynapseTasksTests" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				BE5D4AAEB8DE46052E96C7AF /* Debug */,
-				75987DE0222E1BB3DE6A9A5C /* Release */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Debug;
-		};
 		13CB9BA62051666F071CB47D /* Build configuration list for PBXProject "SynapseTasks" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (

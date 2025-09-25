@@ -1,17 +1,22 @@
-import CoreData
 import SwiftUI
+import OSLog
 
 @main
 struct SynapseTasksApp: App {
-    let persistenceController = PersistenceController.shared
-
+    @StateObject private var store = TaskStore()
+    init() {
+        print("🔥 App init")
+        Logger(subsystem: "com.kousuke.synapsetasks", category: "lifecycle").info("App init")
+    }
     var body: some Scene {
         WindowGroup {
-            TaskListView() // ← とりあえず一覧ビュー（後で差し替えOK）
-                .environment(
-                    \.managedObjectContext,
-                    persistenceController.container.viewContext
-                )
+            TaskListView()
+                .environmentObject(store)
+                .onAppear {
+                    print("👀 TaskListView root onAppear")
+                    Logger(subsystem: "com.kousuke.synapsetasks", category: "ui").info("TaskListView appeared")
+                }
         }
     }
 }
+

@@ -1,31 +1,20 @@
 name: SynapseTasks
 options:
-  deploymentTarget: { iOS: "17.0" }
-  createIntermediateGroups: true
+  bundleIdPrefix: com.kousuke
+  deploymentTarget:
+    iOS: "16.0"
+
 targets:
   SynapseTasks:
     type: application
     platform: iOS
-    sources: [Sources/App]
+    sources:
+      - path: SynapseTasks
     settings:
       base:
-        INFOPLIST_FILE: Sources/App/Info.plist
         PRODUCT_BUNDLE_IDENTIFIER: com.kousuke.synapsetasks
-        BASE_CONFIGURATION_REFERENCE: Configs/Base.xcconfig
-
-  SynapseTasksTests:
-    type: bundle.unit-test
-    platform: iOS
-    sources: [Sources/Tests]
-    dependencies: [{ target: SynapseTasks }]
-    settings:
-      base:
         GENERATE_INFOPLIST_FILE: YES
-        PRODUCT_BUNDLE_IDENTIFIER: com.kousuke.synapsetasks.tests
-        CODE_SIGNING_ALLOWED: NO
+        # 生成される Info.plist に追加したいキー（任意）
+        INFOPLIST_KEY_CFBundleDisplayName: Synapse Tasks
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES   # まっさらの起動画面を自動生成
 
-schemes:
-  SynapseTasks:
-    build: { targets: { SynapseTasks: all } }
-    test:  { targets: [SynapseTasksTests] }
-    run:   { config: Debug }

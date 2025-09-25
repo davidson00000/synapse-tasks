@@ -1,8 +1,19 @@
 name: iOS CI
 on: [push, pull_request]
 jobs:
+  lint:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - run: brew install xcodegen swiftformat swiftlint
+      - run: pip3 install --user pre-commit
+      - run: xcodegen generate
+      - name: pre-commit (swiftformat & swiftlint)
+        run: ~/.local/bin/pre-commit run --all-files
+
   build-test:
     runs-on: macos-14
+    needs: lint
     steps:
       - uses: actions/checkout@v4
       - run: brew install xcodegen

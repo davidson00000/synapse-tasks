@@ -1,0 +1,32 @@
+name: UI Capture
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main, develop ]
+jobs:
+  capture:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Show Xcode version and runtimes
+        run: |
+          xcodebuild -version
+          xcrun simctl list runtimes
+          xcrun simctl list devicetypes
+      - name: Build & Capture Screens
+        env:
+          DEVICE_NAME: iPhone 15
+          WEEKDAY_FOR_WEEKLY: 3
+          CONFIG: Debug
+        run: |
+          chmod +x scripts/ui_capture.sh
+          ./scripts/ui_capture.sh
+      - name: Upload UI Captures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui_captures
+          path: |
+            build/ui/*.png
+            ui_captures/**/*
+          if-no-files-found: warn
