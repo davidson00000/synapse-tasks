@@ -8,23 +8,34 @@ on:
 jobs:
   ui-capture:
     runs-on: macos-14
+
     steps:
       - uses: actions/checkout@v4
 
+      # ★ Xcode 16 を選択（これで project format 77 を読めます）
+      - name: Select Xcode 16
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: '16.0'
+
+      # 診断（いまのXcode/SDK/スキーム確認）
       - name: Preflight (verify repo state)
         run: |
           set -x
+          xcodebuild -version
+          xcodebuild -showsdks
+          xcrun simctl list devices
+          xcodebuild -list -project SynapseTasks.xcodeproj
           git rev-parse --short HEAD
-          git log -1 --oneline
-          ls -la
-          ls -la scripts || true
-          echo "---- head of scripts/ui_capture.sh ----"
           head -n 40 scripts/ui_capture.sh || true
 
+      # ビルド＋スクリーンキャプチャ（スクリプト実行）
       - name: Build & Capture Screens
         env:
           PROJECT: SynapseTasks.xcodeproj
           SCHEME: SynapseTasks
+          # OSの指定が要らない環境もあるのでデフォルトは「名前のみ」指定
+          DESTINATION: "platform=iOS Simulator,name=iPhone 16"
         run: |
           chmod +x scripts/ui_capture.sh
           ./scripts/ui_capture.sh
