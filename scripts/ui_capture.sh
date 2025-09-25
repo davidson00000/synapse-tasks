@@ -1,3 +1,4 @@
+
 #!/usr/bin/env bash
 set -euo pipefail
 
@@ -28,18 +29,19 @@ xcodebuild \
   -sdk iphonesimulator \
   -destination "id=$UDID" \
   -derivedDataPath "$DERIVED" \
-  build | xcpretty
+  build \
+  | xcpretty
 
-# ▼ ここを差し替え：find で .app を解決
-APP_PATH="$(/usr/bin/find "$DERIVED/Build/Products" -type d -name "*.app" \
-  -path "*/iphonesimulator/*" -print -quit)"
+# 3) .app の場所を確定 (Debug-iphonesimulator 以下を探索)
+APP_PATH="$(/usr/bin/find "$DERIVED/Build/Products/Debug-iphonesimulator" -type d -name "*.app" -print -quit)"
 
 if [ -z "${APP_PATH:-}" ] || [ ! -d "$APP_PATH" ]; then
-  echo "[error] .app not found under $DERIVED/Build/Products"
-  /usr/bin/find "$DERIVED/Build/Products" -maxdepth 4 -type d -name "*.app" -print
+  echo "[error] .app not found under $DERIVED/Build/Products/Debug-iphonesimulator"
+  /usr/bin/find "$DERIVED/Build/Products/Debug-iphonesimulator" -maxdepth 2 -type d -name "*.app" -print
   exit 1
 fi
 echo "[info] APP_PATH: $APP_PATH"
+
 # 4) Bundle ID 取得
 BUNDLE_ID=$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$APP_PATH/Info.plist")
 echo "[info] BundleID: $BUNDLE_ID"
@@ -63,7 +65,7 @@ capture_with_env () {
   xcrun simctl io "$UDID" screenshot "$ARTIFACTS/$name.png"
 }
 
-# 例：初期タブや曜日を環境変数／起動引数で切替（アプリ側実装に合わせて）
+# 例：初期タブや曜日を環境変数／起動引数で切替（アプリ側実装に合わせて調整）
 capture_with_env "03_list"  LAUNCH_INITIAL_TAB=list
 capture_with_env "04_board" LAUNCH_INITIAL_TAB=board
 capture_with_env "05_week"  LAUNCH_INITIAL_TAB=week LAUNCH_WEEKDAY=thu
@@ -72,4 +74,3 @@ capture_with_env "05_week"  LAUNCH_INITIAL_TAB=week LAUNCH_WEEKDAY=thu
 xcrun simctl shutdown "$UDID"
 xcrun simctl delete "$UDID"
 echo "[info] Screenshots -> $ARTIFACTS"
-
