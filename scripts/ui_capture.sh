@@ -1,90 +1,82 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-PROJECT="${PROJECT:-SynapseTasks.xcodeproj}"
 SCHEME="${SCHEME:-SynapseTasks}"
+PROJECT="${PROJECT:-SynapseTasks.xcodeproj}"
+RUNTIME="${RUNTIME:-com.apple.CoreSimulator.SimRuntime.iOS-18-2}"
+DEVTYPE="${DEVTYPE:-com.apple.CoreSimulator.SimDeviceType.iPhone-15}"
+DERIVED="${DERIVED:-$PWD/build/ci-derived}"
+ARTIFACTS="${ARTIFACTS:-artifacts/screenshots}"
+
+mkdir -p "$ARTIFACTS"
 echo "[info] Project : $PROJECT"
 echo "[info] Scheme  : $SCHEME"
-
-# --- scheme check ---
-if ! xcodebuild -list -project "$PROJECT" | awk '/Schemes:/,0' | grep -q -E "^[[:space:]]+$SCHEME$"; then
-  echo "[error] Scheme '$SCHEME' not found in $PROJECT" >&2
-  xcodebuild -list -project "$PROJECT" || true
-  exit 2
-fi
-
-# --- pick latest iOS runtime & a stable device type ---
-RUNTIME=$(xcrun simctl list runtimes | awk '/iOS/{print $NF}' | tail -n1)
-DEVTYPE="com.apple.CoreSimulator.SimDeviceType.iPhone-15"
-if [[ -z "${RUNTIME:-}" ]]; then
-  echo "[error] No iOS runtimes found"; xcrun simctl list runtimes; exit 3
-fi
 echo "[info] Using runtime: $RUNTIME"
 echo "[info] Device type  : $DEVTYPE"
 
-# --- create a fresh temp device (avoid flaky preinstalled ones) ---
-DEVICE_NAME="CI-Temp-$(date +%s)"
-UDID=$(xcrun simctl create "$DEVICE_NAME" "$DEVTYPE" "$RUNTIME")
-echo "[info] Created simulator: $DEVICE_NAME ($UDID)"
+# 1) 一時シミュレータを作成して起動
+UDID=$(xcrun simctl create "CI-Temp-$(date +%s)" "$DEVTYPE" "$RUNTIME")
+echo "[info] Created simulator: $UDID"
+xcrun simctl boot "$UDID"
+xcrun simctl bootstatus "$UDID" -b
 
-cleanup() {
-  echo "[info] Cleanup: shutting down & deleting $UDID"
-  xcrun simctl shutdown "$UDID" >/dev/null 2>&1 || true
-  xcrun simctl delete   "$UDID" >/dev/null 2>&1 || true
-}
-trap cleanup EXIT
-
-# --- boot with timeout & one retry ---
-boot_and_wait() {
-  local id="$1"
-  echo "[info] Booting $id ..."
-  xcrun simctl boot "$id" || true
-  # -d 180: 180秒でタイムアウト。System App待ちでハングしない。
-  if ! xcrun simctl bootstatus "$id" -b -d 180; then
-    echo "[warn] bootstatus timeout for $id"
-    return 1
-  fi
-  return 0
-}
-boot_and_wait "$UDID" || {
-  echo "[warn] Retry after erase..."
-  xcrun simctl erase "$UDID" || true
-  boot_and_wait "$UDID" || { echo "[error] Simulator failed to boot"; exit 4; }
-}
-
-# --- build (DerivedData fixed) ---
-DERIVED="build"
+# 2) ビルド（iphonesimulator / 同一 DerivedData を指定）
 xcodebuild \
   -project "$PROJECT" \
   -scheme "$SCHEME" \
-  -destination "id=$UDID" \
-  -sdk iphonesimulator \
   -configuration Debug \
+  -sdk iphonesimulator \
+  -destination "id=$UDID" \
   -derivedDataPath "$DERIVED" \
-  clean build | xcpretty || true
+  build \
+  | xcpretty
 
-APP_DIR="$DERIVED/Build/Products/Debug-iphonesimulator"
-APP_PATH=$(ls -1 "$APP_DIR"/*.app | head -n1 || true)
-[[ -z "${APP_PATH}" ]] && { echo "[error] .app not found under $APP_DIR"; exit 5; }
-echo "[info] Built app: $APP_PATH"
+# 3) .app の場所を確定
+APP_PATH=$(
+  xcodebuild -project "$PROJECT" -scheme "$SCHEME" -showBuildSettings -json \
+  | /usr/bin/python3 - <<'PY'
+import json,sys
+d=json.load(sys.stdin)[0]["buildSettings"]
+print(f'{d["TARGET_BUILD_DIR"]}/{d["WRAPPER_NAME"]}')
+PY
+)
 
-# --- bundle id from Info.plist ---
-PLIST="$APP_PATH/Info.plist"
-BUNDLE_ID=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$PLIST" 2>/dev/null || true)
-echo "[info] BundleID: ${BUNDLE_ID:-<unknown>}"
-
-# --- install & (optional) launch ---
-xcrun simctl install "$UDID" "$APP_PATH" || true
-if [[ -n "${BUNDLE_ID:-}" ]]; then
-  xcrun simctl launch "$UDID" "$BUNDLE_ID" || echo "[warn] launch failed"
+if [ ! -d "$APP_PATH" ]; then
+  echo "[error] .app not found: $APP_PATH"
+  exit 1
 fi
+echo "[info] APP_PATH: $APP_PATH"
 
-# --- screenshot ---
-mkdir -p artifacts/screenshots
-if ! xcrun simctl io "$UDID" screenshot "artifacts/screenshots/screen.png"; then
-  echo "[warn] screenshot failed; trying booted fallback"
-  xcrun simctl io booted screenshot "artifacts/screenshots/screen.png" || true
-fi
+# 4) Bundle ID 取得
+BUNDLE_ID=$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$APP_PATH/Info.plist")
+echo "[info] BundleID: $BUNDLE_ID"
 
-echo "[info] Done. See artifacts/screenshots/screen.png"
+# 5) インストール & 起動
+xcrun simctl install "$UDID" "$APP_PATH"
+xcrun simctl launch "$UDID" "$BUNDLE_ID" || echo "[warn] launch failed (will continue)"
+
+# 6) スクショ（ホーム→アプリ）
+sleep 2
+xcrun simctl io "$UDID" screenshot "$ARTIFACTS/01_home.png"
+sleep 2
+xcrun simctl io "$UDID" screenshot "$ARTIFACTS/02_app_default.png"
+
+# 7) 追加スクショ（環境変数で初期画面を切替）
+capture_with_env () {
+  local name="$1"; shift
+  xcrun simctl terminate "$UDID" "$BUNDLE_ID" || true
+  xcrun simctl launch "$UDID" "$BUNDLE_ID" --args "$@"
+  sleep 2
+  xcrun simctl io "$UDID" screenshot "$ARTIFACTS/$name.png"
+}
+
+# 例：初期タブや曜日を環境変数／起動引数で切替（アプリ側実装に合わせて）
+capture_with_env "03_list"  LAUNCH_INITIAL_TAB=list
+capture_with_env "04_board" LAUNCH_INITIAL_TAB=board
+capture_with_env "05_week"  LAUNCH_INITIAL_TAB=week LAUNCH_WEEKDAY=thu
+
+# 8) クリーンアップ
+xcrun simctl shutdown "$UDID"
+xcrun simctl delete "$UDID"
+echo "[info] Screenshots -> $ARTIFACTS"
 
