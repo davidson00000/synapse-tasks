@@ -22,8 +22,7 @@ private struct LaunchSettings {
 
     init(environment: [String: String] = ProcessInfo.processInfo.environment) {
         if let tabValue = environment["TASKS_SCREENSHOT_TAB"]?.lowercased(),
-           let tab = TaskListView.Tab(rawValue: tabValue)
-        {
+           let tab = TaskListView.Tab(rawValue: tabValue) {
             initialTab = tab
         } else {
             initialTab = .list
