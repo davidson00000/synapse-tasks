@@ -1,4 +1,3 @@
-
 #!/usr/bin/env bash
 set -euo pipefail
 
@@ -29,15 +28,13 @@ xcodebuild \
   -sdk iphonesimulator \
   -destination "id=$UDID" \
   -derivedDataPath "$DERIVED" \
-  build \
-  | xcpretty
+  build | xcpretty
 
 # 3) .app の場所を確定 (Debug-iphonesimulator 以下を探索)
 APP_PATH="$(/usr/bin/find "$DERIVED/Build/Products/Debug-iphonesimulator" -type d -name "*.app" -print -quit)"
-
 if [ -z "${APP_PATH:-}" ] || [ ! -d "$APP_PATH" ]; then
   echo "[error] .app not found under $DERIVED/Build/Products/Debug-iphonesimulator"
-  /usr/bin/find "$DERIVED/Build/Products/Debug-iphonesimulator" -maxdepth 2 -type d -name "*.app" -print
+  /usr/bin/find "$DERIVED/Build/Products/Debug-iphonesimulator" -maxdepth 3 -type d -name "*.app" -print || true
   exit 1
 fi
 echo "[info] APP_PATH: $APP_PATH"
@@ -47,7 +44,16 @@ BUNDLE_ID=$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$APP_PATH/In
 echo "[info] BundleID: $BUNDLE_ID"
 
 # 5) インストール & 起動
+set +e
 xcrun simctl install "$UDID" "$APP_PATH"
+INSTALL_RC=$?
+set -e
+if [ $INSTALL_RC -ne 0 ]; then
+  echo "[error] install failed (rc=$INSTALL_RC). Dumping Info.plist:"
+  /usr/libexec/PlistBuddy -c "Print" "$APP_PATH/Info.plist" || true
+  exit $INSTALL_RC
+fi
+
 xcrun simctl launch "$UDID" "$BUNDLE_ID" || echo "[warn] launch failed (will continue)"
 
 # 6) スクショ（ホーム→アプリ）
@@ -56,7 +62,7 @@ xcrun simctl io "$UDID" screenshot "$ARTIFACTS/01_home.png"
 sleep 2
 xcrun simctl io "$UDID" screenshot "$ARTIFACTS/02_app_default.png"
 
-# 7) 追加スクショ（環境変数で初期画面を切替）
+# 7) 追加スクショ（起動引数で画面切替）
 capture_with_env () {
   local name="$1"; shift
   xcrun simctl terminate "$UDID" "$BUNDLE_ID" || true
@@ -65,10 +71,10 @@ capture_with_env () {
   xcrun simctl io "$UDID" screenshot "$ARTIFACTS/$name.png"
 }
 
-# 例：初期タブや曜日を環境変数／起動引数で切替（アプリ側実装に合わせて調整）
-capture_with_env "03_list"  LAUNCH_INITIAL_TAB=list
-capture_with_env "04_board" LAUNCH_INITIAL_TAB=board
-capture_with_env "05_week"  LAUNCH_INITIAL_TAB=week LAUNCH_WEEKDAY=thu
+# ← アプリ側が対応している起動引数に合わせて調整
+capture_with_env "03_list"  TASKS_SCREENSHOT_TAB=list
+capture_with_env "04_board" TASKS_SCREENSHOT_TAB=board
+capture_with_env "05_week"  TASKS_SCREENSHOT_TAB=week TASKS_SELECTED_WEEKDAY=thu
 
 # 8) クリーンアップ
 xcrun simctl shutdown "$UDID"
