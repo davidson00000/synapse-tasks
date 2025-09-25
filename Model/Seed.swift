@@ -43,7 +43,7 @@ enum Seed {
             "Metrics",
             "Automation",
             "Meeting",
-            "Bugfix"
+            "Bugfix",
         ].map { name in
             let tag = Tag(context: context)
             tag.name = name

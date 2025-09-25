@@ -28,25 +28,18 @@ xcodebuild \
   -sdk iphonesimulator \
   -destination "id=$UDID" \
   -derivedDataPath "$DERIVED" \
-  build \
-  | xcpretty
+  build | xcpretty
 
-# 3) .app の場所を確定
-APP_PATH=$(
-  xcodebuild -project "$PROJECT" -scheme "$SCHEME" -showBuildSettings -json \
-  | /usr/bin/python3 - <<'PY'
-import json,sys
-d=json.load(sys.stdin)[0]["buildSettings"]
-print(f'{d["TARGET_BUILD_DIR"]}/{d["WRAPPER_NAME"]}')
-PY
-)
+# ▼ ここを差し替え：find で .app を解決
+APP_PATH="$(/usr/bin/find "$DERIVED/Build/Products" -type d -name "*.app" \
+  -path "*/iphonesimulator/*" -print -quit)"
 
-if [ ! -d "$APP_PATH" ]; then
-  echo "[error] .app not found: $APP_PATH"
+if [ -z "${APP_PATH:-}" ] || [ ! -d "$APP_PATH" ]; then
+  echo "[error] .app not found under $DERIVED/Build/Products"
+  /usr/bin/find "$DERIVED/Build/Products" -maxdepth 4 -type d -name "*.app" -print
   exit 1
 fi
 echo "[info] APP_PATH: $APP_PATH"
-
 # 4) Bundle ID 取得
 BUNDLE_ID=$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$APP_PATH/Info.plist")
 echo "[info] BundleID: $BUNDLE_ID"
