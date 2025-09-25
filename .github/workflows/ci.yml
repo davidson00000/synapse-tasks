@@ -6,8 +6,12 @@ on:
   pull_request:
     branches: [ "main" ]
 
+# CI からリポジトリへ自動コミット＆pushできるように
+permissions:
+  contents: write
+
 jobs:
-  build-test-lint-capture:
+  ios:
     runs-on: macos-14
 
     steps:
@@ -16,42 +20,42 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Setup Xcode
+      - name: Select Xcode 16.2
         run: |
           sudo xcode-select -s /Applications/Xcode_16.2.app/Contents/Developer
           xcodebuild -version
-          xcodebuild -showsdks
 
-      - name: Install tools (SwiftFormat, xcpretty)
+      - name: Install tools (swiftformat & xcpretty)
         run: |
           brew update
-          brew install swiftformat@0.53 || true
-          brew link --overwrite swiftformat@0.53
+          brew install swiftformat    # ← バージョン固定をやめる
           gem install xcpretty --no-document
           swiftformat --version
 
-      - name: Ensure Info.plist has versions
+      - name: Ensure Info.plist has version keys
         run: |
           chmod +x scripts/ensure_plist.sh
           ./scripts/ensure_plist.sh "SynapseTasks" "1.0" "$GITHUB_RUN_NUMBER"
 
-      # ======= Autofix → Lint の順 =======
+      # ====== ここでまず整形（autofix）→ 自動コミット ======
       - name: SwiftFormat autofix
         run: swiftformat .
 
-      - name: Commit autofix (if any)
+      - name: Commit autofix & plist fixes (if any)
         run: |
           git config user.name "ci-bot"
           git config user.email "ci-bot@users.noreply.github.com"
           if ! git diff --quiet; then
             git add -A
-            git commit -m "style(ci): swiftformat autofix"
+            git commit -m "ci(self-heal): swiftformat & plist fixes"
+            # PR時にpushがブロックされても失敗させない
+            git push || true
           fi
 
       - name: SwiftFormat lint
         run: swiftformat --lint .
 
-      - name: iOS Build (simulator)
+      - name: Build for simulator
         run: |
           set -e
           xcodebuild \
@@ -62,7 +66,7 @@ jobs:
             -destination "platform=iOS Simulator,name=iPhone 15,OS=18.2" \
             build | xcpretty
 
-      - name: UI capture (multi-shots)
+      - name: UI capture (multi shots)
         run: |
           chmod +x scripts/ui_capture.sh
           SCHEME=SynapseTasks \
@@ -77,16 +81,3 @@ jobs:
           name: screenshots
           path: artifacts/screenshots/*.png
 
-      # 失敗時の自己修復フロー（オプション）
-      - name: On failure - open PR with fixes
-        if: failure()
-        run: |
-          git switch -c ci/self-heal || git checkout -b ci/self-heal
-          git add -A
-          if git diff --cached --quiet; then
-            echo "No changes to propose."
-            exit 0
-          fi
-          git commit -m "ci(self-heal): auto-fixes from failed run"
-          git push -u origin ci/self-heal || true
-          echo "::notice::If push blocked, please open PR from ci/self-heal."
