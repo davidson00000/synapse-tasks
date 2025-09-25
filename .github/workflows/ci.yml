@@ -1,76 +1,151 @@
-name: iOS CI (self-heal)
+name: iOS UI Capture
 
 on:
+  workflow_dispatch:
   push:
-    branches: [ "main" ]
-  pull_request:
-    branches: [ "main" ]
-
-permissions:
-  contents: write
+    branches:
+      - main
 
 jobs:
-  ios:
-    runs-on: macos-14
+  ui-shot:
+    name: UI Shot (${{ matrix.combo.tab }}_${{ matrix.combo.weekday }})
+    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        combo:
+          - tab: board
+            weekday: mon
+    env:
+      SCHEME: SynapseTasks
+      PROJECT: SynapseTasks.xcodeproj
+      DERIVED_DATA: build/ci-derived
+      TASKS_SCREENSHOT_TAB: ${{ matrix.combo.tab }}
+      TASKS_SELECTED_WEEKDAY: ${{ matrix.combo.weekday }}
+      SCREENSHOT_OUTPUT: artifacts/ui/${{ matrix.combo.tab }}_${{ matrix.combo.weekday }}.png
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
-      - name: Select Xcode 16.2
+      - name: Select Xcode
         run: |
-          sudo xcode-select -s /Applications/Xcode_16.2.app/Contents/Developer
+          sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
           xcodebuild -version
+          xcodebuild -showsdks
 
-      - name: Install tools
+      - name: Install tooling
         run: |
-          brew update
-          brew install swiftformat
-          gem install xcpretty --no-document
-          swiftformat --version
+          sudo gem install xcpretty --no-document
 
-      # ====== 先に整形 → 自動コミット → それから lint ======
-      - name: SwiftFormat autofix
-        run: swiftformat .
-
-      - name: Commit autofix (if any)
+      - name: Build (Debug)
         run: |
-          git config user.name "ci-bot"
-          git config user.email "ci-bot@users.noreply.github.com"
-          if ! git diff --quiet; then
-            git add -A
-            git commit -m "ci(self-heal): swiftformat autofix"
-            git push || true
-          fi
-
-      - name: SwiftFormat lint
-        run: swiftformat --lint .
-
-      - name: Build (Simulator)
-        run: |
-          set -e
+          set -euo pipefail
+          mkdir -p "$DERIVED_DATA"
           xcodebuild \
-            -project SynapseTasks.xcodeproj \
-            -scheme SynapseTasks \
+            -project "$PROJECT" \
+            -scheme "$SCHEME" \
             -configuration Debug \
             -sdk iphonesimulator \
-            -destination "platform=iOS Simulator,name=iPhone 15,OS=18.2" \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath "$DERIVED_DATA" \
             build | xcpretty
 
-      - name: UI capture (multi shots)
+      - name: Resolve artifacts
         run: |
-          chmod +x scripts/ui_capture.sh
-          SCHEME=SynapseTasks \
-          PROJECT=SynapseTasks.xcodeproj \
-          RUNTIME=com.apple.CoreSimulator.SimRuntime.iOS-18-2 \
-          DEVTYPE=com.apple.CoreSimulator.SimDeviceType.iPhone-15 \
-          ./scripts/ui_capture.sh
+          set -euo pipefail
+          APP_PATH=$(find "$DERIVED_DATA/Build/Products" -type d -name "*.app" -print -quit)
+          if [ -z "$APP_PATH" ]; then
+            echo "App not found" >&2
+            find "$DERIVED_DATA" -maxdepth 4 -type d -name "*.app"
+            exit 1
+          fi
+          echo "APP_PATH=$APP_PATH" >> "$GITHUB_ENV"
+          BUNDLE_ID=$(xcodebuild -showBuildSettings -project "$PROJECT" -scheme "$SCHEME" -configuration Debug -sdk iphonesimulator | awk -F ' = ' '/PRODUCT_BUNDLE_IDENTIFIER/ {print $2; exit}')
+          if [ -z "$BUNDLE_ID" ]; then
+            echo "Unable to resolve bundle identifier" >&2
+            exit 1
+          fi
+          echo "BUNDLE_ID=$BUNDLE_ID" >> "$GITHUB_ENV"
 
-      - name: Upload screenshots
+      - name: Create simulator
+        run: |
+          set -euo pipefail
+          RUNTIME=$(xcrun simctl list runtimes --json | python3 - <<'PY'
+import json, sys
+runtimes = json.load(sys.stdin).get("runtimes", [])
+preferred = None
+fallback = None
+for rt in runtimes:
+    if not rt.get("isAvailable", False):
+        continue
+    identifier = rt.get("identifier", "")
+    if identifier.startswith("com.apple.CoreSimulator.SimRuntime.iOS-18") and preferred is None:
+        preferred = identifier
+    if identifier.startswith("com.apple.CoreSimulator.SimRuntime.iOS") and fallback is None:
+        fallback = identifier
+print(preferred or fallback or "", end="")
+PY
+)
+          if [ -z "$RUNTIME" ]; then
+            echo "Simulator runtime not found" >&2
+            exit 1
+          fi
+          DEVTYPE=$(xcrun simctl list devicetypes --json | python3 - <<'PY'
+import json, sys
+for dt in json.load(sys.stdin).get("devicetypes", [])[::-1]:
+    name = dt.get("name", "")
+    if "iPhone 15" in name:
+        print(dt.get("identifier", ""), end="")
+        break
+PY
+)
+          if [ -z "$DEVTYPE" ]; then
+            echo "Simulator device type not found" >&2
+            exit 1
+          fi
+          UDID=$(xcrun simctl create "ci-${{ github.run_id }}-$RANDOM" "$DEVTYPE" "$RUNTIME")
+          echo "RUNTIME=$RUNTIME" >> "$GITHUB_ENV"
+          echo "DEVTYPE=$DEVTYPE" >> "$GITHUB_ENV"
+          echo "UDID=$UDID" >> "$GITHUB_ENV"
+          echo "Created simulator: $UDID"
+
+      - name: Capture screenshot
+        env:
+          APP_PATH: ${{ env.APP_PATH }}
+          BUNDLE_ID: ${{ env.BUNDLE_ID }}
+          UDID: ${{ env.UDID }}
+        run: |
+          set -euo pipefail
+          chmod +x scripts/ui_capture.sh
+          echo "[info] Target screenshot: $SCREENSHOT_OUTPUT"
+          scripts/ui_capture.sh \
+            --scheme "$SCHEME" \
+            --project "$PROJECT" \
+            --derived-data "$DERIVED_DATA" \
+            --udid "$UDID" \
+            --bundle-id "$BUNDLE_ID" \
+            --app-path "$APP_PATH" \
+            --screenshot "$SCREENSHOT_OUTPUT"
+
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: screenshots
-          path: artifacts/screenshots/*.png
+          name: ui-${{ matrix.combo.tab }}-${{ matrix.combo.weekday }}
+          path: artifacts/ui/
 
+      - name: Cleanup simulator
+        if: always()
+        env:
+          UDID: ${{ env.UDID }}
+        run: |
+          if [ -n "${UDID:-}" ]; then
+            xcrun simctl shutdown "$UDID" 2>/dev/null || true
+            xcrun simctl delete "$UDID" 2>/dev/null || true
+          fi
+
+      - name: Dump diagnostics (on failure)
+        if: failure()
+        run: |
+          xcrun simctl list
+          xcodebuild -project "$PROJECT" -scheme "$SCHEME" -showBuildSettings | head -200
