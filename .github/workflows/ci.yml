@@ -31,6 +31,15 @@ jobs:
           set -euxo pipefail
           xcrun simctl shutdown all || true
           xcrun simctl erase all || true
+    
+      - name: Sync legacy path (temporary fix)
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p SynapseTasks/Views
+          # 新実装を旧パスにも複製（XcodeのCompile Sourcesが旧パスを指している対策）
+          cp -f Features/ListUI/TaskListView.swift SynapseTasks/Views/TaskListView.swift || true
+
 
       # ======== ビルド with ログ採取 ========
       - name: Build (Debug) with full logs
