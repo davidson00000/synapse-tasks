@@ -6,7 +6,6 @@ on:
   pull_request:
     branches: [ "main" ]
 
-# CI からリポジトリへ自動コミット＆pushできるように
 permissions:
   contents: write
 
@@ -25,37 +24,31 @@ jobs:
           sudo xcode-select -s /Applications/Xcode_16.2.app/Contents/Developer
           xcodebuild -version
 
-      - name: Install tools (swiftformat & xcpretty)
+      - name: Install tools
         run: |
           brew update
-          brew install swiftformat    # ← バージョン固定をやめる
+          brew install swiftformat
           gem install xcpretty --no-document
           swiftformat --version
 
-      - name: Ensure Info.plist has version keys
-        run: |
-          chmod +x scripts/ensure_plist.sh
-          ./scripts/ensure_plist.sh "SynapseTasks" "1.0" "$GITHUB_RUN_NUMBER"
-
-      # ====== ここでまず整形（autofix）→ 自動コミット ======
+      # ====== 先に整形 → 自動コミット → それから lint ======
       - name: SwiftFormat autofix
         run: swiftformat .
 
-      - name: Commit autofix & plist fixes (if any)
+      - name: Commit autofix (if any)
         run: |
           git config user.name "ci-bot"
           git config user.email "ci-bot@users.noreply.github.com"
           if ! git diff --quiet; then
             git add -A
-            git commit -m "ci(self-heal): swiftformat & plist fixes"
-            # PR時にpushがブロックされても失敗させない
+            git commit -m "ci(self-heal): swiftformat autofix"
             git push || true
           fi
 
       - name: SwiftFormat lint
         run: swiftformat --lint .
 
-      - name: Build for simulator
+      - name: Build (Simulator)
         run: |
           set -e
           xcodebuild \

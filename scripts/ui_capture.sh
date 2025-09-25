@@ -14,13 +14,13 @@ echo "[info] Scheme  : $SCHEME"
 echo "[info] Using runtime: $RUNTIME"
 echo "[info] Device type  : $DEVTYPE"
 
-# 1) 一時シミュレータを作成して起動
+# 1) create & boot simulator
 UDID=$(xcrun simctl create "CI-Temp-$(date +%s)" "$DEVTYPE" "$RUNTIME")
 echo "[info] Created simulator: $UDID"
 xcrun simctl boot "$UDID"
 xcrun simctl bootstatus "$UDID" -b
 
-# 2) ビルド（iphonesimulator / 同一 DerivedData を指定）
+# 2) build for that device
 xcodebuild \
   -project "$PROJECT" \
   -scheme "$SCHEME" \
@@ -30,7 +30,7 @@ xcodebuild \
   -derivedDataPath "$DERIVED" \
   build | xcpretty
 
-# 3) .app の場所を確定 (Debug-iphonesimulator 以下を探索)
+# 3) resolve .app
 APP_PATH="$(/usr/bin/find "$DERIVED/Build/Products/Debug-iphonesimulator" -type d -name "*.app" -print -quit)"
 if [ -z "${APP_PATH:-}" ] || [ ! -d "$APP_PATH" ]; then
   echo "[error] .app not found under $DERIVED/Build/Products/Debug-iphonesimulator"
@@ -39,44 +39,44 @@ if [ -z "${APP_PATH:-}" ] || [ ! -d "$APP_PATH" ]; then
 fi
 echo "[info] APP_PATH: $APP_PATH"
 
-# 4) Bundle ID 取得
+# 4) bundle id
 BUNDLE_ID=$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$APP_PATH/Info.plist")
 echo "[info] BundleID: $BUNDLE_ID"
 
-# 5) インストール & 起動
+# 5) install
 set +e
 xcrun simctl install "$UDID" "$APP_PATH"
-INSTALL_RC=$?
+RC=$?
 set -e
-if [ $INSTALL_RC -ne 0 ]; then
-  echo "[error] install failed (rc=$INSTALL_RC). Dumping Info.plist:"
+if [ $RC -ne 0 ]; then
+  echo "[error] install failed (rc=$RC). Info.plist dump:"
   /usr/libexec/PlistBuddy -c "Print" "$APP_PATH/Info.plist" || true
-  exit $INSTALL_RC
+  exit $RC
 fi
 
-xcrun simctl launch "$UDID" "$BUNDLE_ID" || echo "[warn] launch failed (will continue)"
-
-# 6) スクショ（ホーム→アプリ）
-sleep 2
-xcrun simctl io "$UDID" screenshot "$ARTIFACTS/01_home.png"
-sleep 2
-xcrun simctl io "$UDID" screenshot "$ARTIFACTS/02_app_default.png"
-
-# 7) 追加スクショ（起動引数で画面切替）
-capture_with_env () {
+# helper: launch with env and take screenshot
+capture_env () {
   local name="$1"; shift
-  xcrun simctl terminate "$UDID" "$BUNDLE_ID" || true
-  xcrun simctl launch "$UDID" "$BUNDLE_ID" --args "$@"
+  xcrun simctl terminate "$UDID" "$BUNDLE_ID" >/dev/null 2>&1 || true
+  xcrun simctl launch "$UDID" "$BUNDLE_ID" --env "$@"
   sleep 2
   xcrun simctl io "$UDID" screenshot "$ARTIFACTS/$name.png"
 }
 
-# ← アプリ側が対応している起動引数に合わせて調整
-capture_with_env "03_list"  TASKS_SCREENSHOT_TAB=list
-capture_with_env "04_board" TASKS_SCREENSHOT_TAB=board
-capture_with_env "05_week"  TASKS_SCREENSHOT_TAB=week TASKS_SELECTED_WEEKDAY=thu
+# 6) home & default
+sleep 1
+xcrun simctl io "$UDID" screenshot "$ARTIFACTS/01_home.png"
+xcrun simctl launch "$UDID" "$BUNDLE_ID" || true
+sleep 2
+xcrun simctl io "$UDID" screenshot "$ARTIFACTS/02_app_default.png"
 
-# 8) クリーンアップ
+# 7) distinct screens via ENV (app expects TASKS_* keys)
+capture_env "03_list"  TASKS_SCREENSHOT_TAB=list
+capture_env "04_board" TASKS_SCREENSHOT_TAB=board
+capture_env "05_week"  TASKS_SCREENSHOT_TAB=week TASKS_SELECTED_WEEKDAY=thu
+
+# 8) cleanup
 xcrun simctl shutdown "$UDID"
 xcrun simctl delete "$UDID"
 echo "[info] Screenshots -> $ARTIFACTS"
+
