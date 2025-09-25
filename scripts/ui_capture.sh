@@ -1,14 +1,47 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# 入力（環境変数で上書き可能）
-UDID="${UDID:-}"
-SCHEME="${SCHEME:-SynapseTasks}"
+# Allow override from env, else auto-detect later
+SCHEME="${SCHEME:-}"
 CONFIG="${CONFIG:-Debug}"
-OUT="ui_captures/$(date +%F)"
-DEVICE_NAME="${DEVICE_NAME:-iPhone 15}"
+DERIVED="build"
+OUT_DIR="$DERIVED/ui"
+DEVICE_NAME="${DEVICE_NAME:-iPhone 17}"
+WEEKDAY_FOR_WEEKLY="${WEEKDAY_FOR_WEEKLY:-3}"  # 1=Sun ... 7=Sat (月=2, デフォ=水=3)
 
-mkdir -p "$OUT"
+mkdir -p "$OUT_DIR"
+mkdir -p ui_captures/$(date +%F)
+OUT="ui_captures/$(date +%F)"
+
+# ===== Detect scheme if not provided =====
+if [ -z "$SCHEME" ]; then
+  echo "[info] Detecting Xcode schemes..."
+  SCHEME_JSON="$(xcodebuild -list -json 2>/dev/null || true)"
+  SCHEME="$(python3 - <<'PY'
+import json, sys
+try:
+    data = json.load(sys.stdin)
+    candidates = data.get("project", {}).get("schemes", []) or data.get("workspace", {}).get("schemes", [])
+    for keyword in ("Synapse", "App", "SynapseTasks"):
+        for scheme in candidates:
+            if keyword.lower() in scheme.lower():
+                print(scheme)
+                raise SystemExit
+    if candidates:
+        print(candidates[0])
+except Exception:
+    pass
+PY
+<<<"$SCHEME_JSON")"
+  if [ -z "$SCHEME" ]; then
+    echo "[error] No Xcode scheme detected." >&2
+    exit 2
+  fi
+fi
+
+echo "[info] Using SCHEME=$SCHEME CONFIG=$CONFIG"
+
+declare -r DEVICE_NAME
 
 DEVICE_UDID="${UDID:-}"
 
@@ -20,27 +53,47 @@ fi
 
 # ない場合はランタイム自動検出→作成
 if [ -z "$DEVICE_UDID" ]; then
-  # pick first available iPhone runtime+devicetype as fallback (CI friendly)
+  echo "[warn] No simulator named '$DEVICE_NAME' found; creating a fresh one..."
   RUNTIME=$(xcrun simctl list runtimes | awk -F '[()]' '/iOS .* - com.apple.CoreSimulator.SimRuntime/ && $0 ~ "Available" {print $2; exit}')
-  TYPE=$(xcrun simctl list devicetypes | awk -F '[()]' '/iPhone/ {print $2; exit}')
-  if [ -n "$RUNTIME" ] && [ -n "$TYPE" ]; then
-    xcrun simctl create "UI Shot" "com.apple.CoreSimulator.SimDeviceType.${TYPE}" "$RUNTIME" >/dev/null
+  TYPE_ID=$(xcrun simctl list devicetypes | awk -F '[()]' '/iPhone .*Pro Max|iPhone 17 Pro|iPhone 17|iPhone 16|iPhone 15/ {print $2; exit}')
+  if [ -n "$RUNTIME" ] && [ -n "$TYPE_ID" ]; then
+    xcrun simctl create "UI Shot" "com.apple.CoreSimulator.SimDeviceType.${TYPE_ID}" "$RUNTIME" >/dev/null
     DEVICE_UDID="$(xcrun simctl list devices | awk -F '[()]' '/UI Shot/ {print $2; exit}')"
   fi
 fi
 
 if [ -z "$DEVICE_UDID" ]; then
-  echo "ERROR: No simulator UDID resolved. Exiting." >&2
+  echo "[error] No simulator UDID resolved. Devices:"
+  xcrun simctl list devices
   exit 2
 fi
 
 echo "Using UDID: $DEVICE_UDID"
 
-# .app の実パスを iphonesimulator で解決
-APP_PATH=$(xcodebuild -scheme "$SCHEME" -configuration "$CONFIG" -sdk iphonesimulator -showBuildSettings \
-  | awk -F' = ' '/TARGET_BUILD_DIR/{t=$2}/WRAPPER_NAME/{w=$2}END{print t"/"w}')
-[ -z "$APP_PATH" ] && { echo "ERROR: APP_PATH could not be resolved."; exit 3; }
-[ -d "$APP_PATH" ] || { echo "ERROR: App not found at $APP_PATH. Run: make build"; exit 3; }
+# 1) Boot simulator
+xcrun simctl shutdown "$DEVICE_UDID" 2>/dev/null || true
+for p in Simulator com.apple.CoreSimulator.CoreSimulatorService; do killall -9 "$p" 2>/dev/null || true; done
+sleep 1
+for i in 1 2 3; do xcrun simctl boot "$DEVICE_UDID" 2>/dev/null && break || sleep $((i*2)); done
+xcrun simctl bootstatus "$DEVICE_UDID" -b || true
+
+# 2) Build
+echo "[info] Building... (scheme=$SCHEME, config=$CONFIG)"
+xcodebuild \
+  -scheme "$SCHEME" \
+  -configuration "$CONFIG" \
+  -destination "platform=iOS Simulator,id=$DEVICE_UDID" \
+  -derivedDataPath "$DERIVED" \
+  -quiet build
+
+APP_PATH="$(/usr/bin/find "$DERIVED/Build/Products/$CONFIG-iphonesimulator" -maxdepth 1 -name "*.app" | head -1)"
+if [ -z "${APP_PATH}" ]; then
+  echo "[error] .app not found under $DERIVED/Build/Products/$CONFIG-iphonesimulator"
+  echo "[debug] Available products:"
+  ls -R "$DERIVED/Build/Products" || true
+  exit 1
+fi
+
 echo "Using APP_PATH: $APP_PATH"
 
 # BUNDLE_ID を Info.plist → だめなら PRODUCT_BUNDLE_IDENTIFIER でフォールバック
@@ -49,15 +102,8 @@ if [ -z "$BUNDLE_ID" ]; then
   BUNDLE_ID=$(xcodebuild -scheme "$SCHEME" -configuration "$CONFIG" -sdk iphonesimulator -showBuildSettings \
     | awk -F' = ' '/^ *PRODUCT_BUNDLE_IDENTIFIER /{print $2; exit}')
 fi
-[ -z "$BUNDLE_ID" ] && { echo "ERROR: BUNDLE_ID not resolved."; exit 4; }
+[ -z "$BUNDLE_ID" ] && { echo "[error] BUNDLE_ID not resolved."; exit 4; }
 echo "Using BUNDLE_ID: $BUNDLE_ID"
-
-# CoreSimulator の軽いクリーン→ブート
-xcrun simctl shutdown "$DEVICE_UDID" 2>/dev/null || true
-for p in Simulator com.apple.CoreSimulator.CoreSimulatorService; do killall -9 "$p" 2>/dev/null || true; done
-sleep 1
-for i in 1 2 3; do xcrun simctl boot "$DEVICE_UDID" 2>/dev/null && break || sleep $((i*2)); done
-xcrun simctl bootstatus "$DEVICE_UDID" -b
 
 # インストール（都度 terminate しながら撮影）
 xcrun simctl install "$DEVICE_UDID" "$APP_PATH"
@@ -102,7 +148,7 @@ shot 01_home
 launch_for_tab board
 shot 02_board
 
-launch_for_tab weekly 5
+launch_for_tab weekly "$WEEKDAY_FOR_WEEKLY"
 shot 03_weekly
 
 echo "Screenshots -> $OUT"

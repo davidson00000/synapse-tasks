@@ -8,14 +8,15 @@ jobs:
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
-      - name: Show Xcode version and runtimes
+      - name: Show Xcode env
         run: |
           xcodebuild -version
           xcrun simctl list runtimes
           xcrun simctl list devicetypes
+          xcodebuild -list -json || true
       - name: Build & Capture Screens
         env:
-          DEVICE_NAME: iPhone 15
+          DEVICE_NAME: iPhone 17
           WEEKDAY_FOR_WEEKLY: 3
           CONFIG: Debug
         run: |
