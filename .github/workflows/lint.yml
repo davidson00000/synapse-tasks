@@ -9,11 +9,9 @@ on:
 jobs:
   lint:
     runs-on: macos-14
-
     steps:
       - uses: actions/checkout@v4
 
-      # ここで全部Homebrew経由にします（pipは使わない）
       - name: Install tooling (brew)
         run: |
           brew update
@@ -29,3 +27,4 @@ jobs:
 
       - name: Run SwiftFormat / SwiftLint via pre-commit
         run: pre-commit run --all-files
+
